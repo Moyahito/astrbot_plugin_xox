@@ -27,6 +27,6 @@ A plugin for AstrBot plugin feature
 
 ## 🤝 支持
 
-遇到 Bug？追星追得太寂寞？想添加新功能？
+遇到 Bug？（多半是解决不了）
 
 请访问 [帮助文档](https://astrbot.app) 
