@@ -1,9 +1,22 @@
+"""
+数据管理器模块
+
+负责：
+- 偶像信息、昵称、简介的存储
+- 应援口号的存储
+- 用户签到记录的存储
+- 管理员列表的存储
+- 图片文件的随机获取
+
+所有数据文件存储在 data 目录下，确保插件更新时数据不丢失
+"""
 import os
 import json
 import random
 import logging
 
 class DataManager:
+    """数据管理器，负责所有持久化数据的读写"""
     def __init__(self, plugin_dir, plugin_data_dir=None, config=None):
         # 设置数据和图片目录
         self.data_dir = os.path.join(plugin_dir, "data")

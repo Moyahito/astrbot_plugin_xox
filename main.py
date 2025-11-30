@@ -1,22 +1,44 @@
+"""
+idol Bot 插件 - 偶像互动与签到系统
+
+功能：
+- 每日签到领取专属"宝宝"
+- 应援口号触发回复
+- 偶像信息查询与管理
+- 管理员权限控制
+
+数据存储：
+- 所有持久化数据存储在 data 目录下，防止更新插件时数据丢失
+- 图片资源存储在 plugin_data 目录下
+"""
 import os
 import datetime
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
-from .data_manager import DataManager # 导入数据管理器
+from .data_manager import DataManager
 
 @register("idol Bot", "Moyahito", "idol bot偶像互动插件精简版", "1.0.0", "https://github.com/Moyahito/astrbot_plugin_xox")
 class SixSixBot(Star):
+    """idol Bot 插件主类"""
+    
     def __init__(self, context: Context):
+        """
+        初始化插件
+        
+        Args:
+            context: AstrBot 提供的上下文对象，包含配置等信息
+        """
         super().__init__(context)
         self.plugin_dir = os.path.dirname(__file__)
         # 计算 plugin_data 目录路径：从 plugin 目录向上两级到 data，然后进入 plugin_data，再进入同名文件夹
         plugin_name = os.path.basename(self.plugin_dir)
         data_dir = os.path.dirname(os.path.dirname(self.plugin_dir))  # 向上两级到 data 目录
         self.plugin_data_dir = os.path.join(data_dir, "plugin_data", plugin_name)
-        # 读取配置
+        # 读取配置（从 _conf_schema.json 解析的配置）
         self.config = context.config or {}
+        # 初始化数据管理器（数据存储在 data 目录下，防止更新插件时丢失）
         self.db = DataManager(self.plugin_dir, self.plugin_data_dir, self.config)
 
     async def initialize(self):
