@@ -1,24 +1,350 @@
-from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
+import os
+import datetime
+from astrbot.api.event import filter, AstrMessageEvent, EventMessageType
 from astrbot.api.star import Context, Star, register
+from astrbot.api.message_components import Plain, At, Image
 from astrbot.api import logger
+from .data_manager import DataManager # 导入数据管理器
 
-@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
-class MyPlugin(Star):
+@register("idol Bot", "Moyahito", "idol bot偶像互动插件精简版", "1.0.0")
+class SixSixBot(Star):
     def __init__(self, context: Context):
         super().__init__(context)
+        self.plugin_dir = os.path.dirname(__file__)
+        # 计算 plugin_data 目录路径：从 plugin 目录向上两级到 data，然后进入 plugin_data，再进入同名文件夹
+        plugin_name = os.path.basename(self.plugin_dir)
+        data_dir = os.path.dirname(os.path.dirname(self.plugin_dir))  # 向上两级到 data 目录
+        self.plugin_data_dir = os.path.join(data_dir, "plugin_data", plugin_name)
+        self.db = DataManager(self.plugin_dir, self.plugin_data_dir)
 
     async def initialize(self):
-        """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
+        logger.info("idol bot 插件初始化完成。")
 
-    # 注册指令的装饰器。指令名为 helloworld。注册成功后，发送 `/helloworld` 就会触发这个指令，并回复 `你好, {user_name}!`
-    @filter.command("helloworld")
-    async def helloworld(self, event: AstrMessageEvent):
-        """这是一个 hello world 指令""" # 这是 handler 的描述，将会被解析方便用户了解插件内容。建议填写。
+    # ================= 核心消息监听 (用于处理口号触发) =================
+    
+    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
+    async def passive_catchphrase_handler(self, event: AstrMessageEvent):
+        """检查非指令消息中是否包含应援口号触发句"""
+        msg_str = event.message_str.strip()
+        
+        if msg_str.startswith("/"):
+            return
+
+        triggers = self.db.data.get("catchphrases", {})
+        
+        for trigger_txt, data in triggers.items():
+            if trigger_txt in msg_str:
+                user_id = event.get_sender_id()
+                idol_name = data.get("idol")
+                response_txt = data.get("resp", "")
+                
+                if not idol_name:
+                    continue
+                
+                img_path = self.db.get_random_image_path(idol_name)
+                
+                chain = [
+                    At(qq=user_id),
+                    Plain(f"\n{response_txt}")
+                ]
+                
+                if img_path and os.path.exists(img_path):
+                    chain.append(Image.fromFileSystem(img_path))
+                else:
+                    chain.append(Plain("\n暂时还没有解锁这位小偶像哦。"))
+
+                yield event.chain_result(chain)
+                return 
+
+    # ================= 签到系统 =================
+    
+    @filter.command("qd")
+    async def cmd_checkin(self, event: AstrMessageEvent):
+        """签到领取今天的宝宝"""
+        user_id = str(event.get_sender_id())
         user_name = event.get_sender_name()
-        message_str = event.message_str # 用户发的纯文本消息字符串
-        message_chain = event.get_messages() # 用户所发的消息的消息链 # from astrbot.api.message_components import *
-        logger.info(message_chain)
-        yield event.plain_result(f"Hello, {user_name}, 你发了 {message_str}!") # 发送一条纯文本消息
+        today = datetime.date.today().isoformat()
+        
+        user_record = self.db.data.get("users", {}).get(user_id, {})
+        if user_record.get("last_checkin") == today:
+            yield event.plain_result(f"@{user_name}\n你今天已经签到过了哦~")
+            return
+
+        lucky_idol = self.db.get_random_idol()
+        if not lucky_idol:
+            yield event.plain_result("还没有添加任何小偶像，无法签到！请先用 /add 添加。")
+            return
+
+        img_path = self.db.get_random_image_path(lucky_idol)
+        
+        self.db.data.setdefault("users", {})[user_id] = {"last_checkin": today}
+        self.db.save("users")
+
+        text_lines = [
+            "签到成功！",
+            f"今天你的宝宝是：{lucky_idol}"
+        ]
+        
+        chain = [
+            At(qq=user_id),
+            Plain(f"\n{text_lines[0]}\n{text_lines[1]}")
+        ]
+        
+        if img_path and os.path.exists(img_path):
+            chain.append(Image.fromFileSystem(img_path))
+        else:
+            chain.append(Plain("\n暂时还没有解锁这位小偶像哦。"))
+
+        yield event.chain_result(chain)
+
+    # ================= 小偶像信息查询与管理 =================
+    
+    @filter.command("xox")
+    async def cmd_idol_info(self, event: AstrMessageEvent):
+        """/xox <姓名或昵称> - 查询小偶像信息"""
+        args = event.message_str.split()[1:]
+        if not args:
+            yield event.plain_result("格式：/xox <姓名或昵称>")
+            return
+            
+        target = args[0].strip()
+        if not target:
+            yield event.plain_result("请输入要查询的姓名或昵称。")
+            return
+            
+        real_name = self.db.get_real_name(target)
+        
+        if not real_name:
+            yield event.plain_result(f"未找到关于 '{target}' 的信息。")
+            return
+            
+        # XOX档案格式化
+        info = self.db.data.get("idols", {}).get(real_name, {})
+        nicks = info.get("nicknames", [])
+        idol_info = info.get("info", "这个人很神秘，目前还没有公开资料，等待管理员补充。")
+        
+        msg = (
+            f"🌟 {real_name} 档案 🌟\n"
+            "-------------------------\n"
+            f"昵称：{', '.join(nicks) if nicks else '无'}\n"
+            f"简介：{idol_info}\n"
+            "-------------------------"
+        )
+            
+        yield event.plain_result(msg)
+
+
+    @filter.command("add")
+    async def cmd_add(self, event: AstrMessageEvent):
+        """/add <姓名> <昵称> 或 /add catchphrase -i -t -r"""
+        msg_parts = event.message_str.split()
+        if len(msg_parts) > 1 and msg_parts[1].lower() == "catchphrase":
+            # 处理 /add catchphrase ...
+            args = msg_parts[2:]
+            async for result in self._add_catchphrase_logic(event, args):
+                yield result
+        else:
+            # 处理 /add <姓名> <昵称>
+            args = msg_parts[1:]
+            async for result in self._add_nickname_logic(event, args):
+                yield result
+
+    async def _add_nickname_logic(self, event: AstrMessageEvent, args):
+        """/add <姓名> <昵称> 的内部实现"""
+        if len(args) < 2:
+            yield event.plain_result("格式：/add <姓名> <昵称>")
+            return
+            
+        real_name = args[0].strip()
+        nickname = args[1].strip()
+        
+        if not real_name or not nickname:
+            yield event.plain_result("姓名和昵称不能为空。")
+            return
+        
+        self.db.add_idol(real_name)  # 注册偶像并创建文件夹
+        
+        # add_idol 已经创建了记录，直接访问即可
+        idols = self.db.data.get("idols", {})
+        if real_name not in idols:
+            # 如果 add_idol 失败，确保记录存在
+            idols[real_name] = {"nicknames": [], "info": "这个人很神秘，目前还没有公开资料，等待管理员补充。"}
+        
+        nicknames = idols[real_name].get("nicknames", [])
+        if nickname not in nicknames:
+            nicknames.append(nickname)
+            self.db.save("idols")
+            yield event.plain_result(f"已为 {real_name} 添加昵称：{nickname}")
+        else:
+            yield event.plain_result(f"{nickname} 已经是 {real_name} 的昵称了。")
+
+    async def _add_catchphrase_logic(self, event: AstrMessageEvent, args):
+        """/add catchphrase -i <name> -t <trigger> -r <response> 的内部实现"""
+        
+        params = {"-i": "", "-t": "", "-r": ""}
+        current_flag = None
+        
+        for word in args:
+            if word in params:
+                current_flag = word
+            elif current_flag is not None:
+                params[current_flag] += word + " "
+        
+        idol_input = params["-i"].strip()
+        trigger = params["-t"].strip()
+        resp = params["-r"].strip()
+
+        if not idol_input or not trigger or not resp:
+            yield event.plain_result("格式错误，请使用：/add catchphrase -i <姓名> -t <触发句> -r <响应句>")
+            return
+
+        real_name = self.db.get_real_name(idol_input)
+        if not real_name:
+            yield event.plain_result(f"找不到偶像 {idol_input}，请先使用 /add 注册。")
+            return
+
+        self.db.data.setdefault("catchphrases", {})[trigger] = {
+            "idol": real_name,
+            "resp": resp
+        }
+        self.db.save("catchphrases")
+        
+        yield event.plain_result(f"添加成功！\n触发：{trigger}\n回复：{resp}\n关联偶像：{real_name}")
+
+    # ================= 列表查询 =================
+
+    @filter.command("list")
+    async def cmd_list(self, event: AstrMessageEvent):
+        """/list <姓名> 或 /list catchphrase"""
+        args = event.message_str.split()[1:]
+
+        if len(args) > 0 and args[0].lower() == "catchphrase":
+            async for result in self._list_catchphrase_logic(event):
+                yield result
+            return
+
+        if not args:
+            yield event.plain_result("格式：/list <姓名> (列出昵称) 或 /list catchphrase (列出口号)")
+            return
+            
+        target = args[0].strip()
+        if not target:
+            yield event.plain_result("请输入要查询的姓名。")
+            return
+            
+        real_name = self.db.get_real_name(target)
+        if not real_name:
+             yield event.plain_result("未找到该偶像。")
+             return
+             
+        nicks = self.db.data.get("idols", {}).get(real_name, {}).get("nicknames", [])
+        yield event.plain_result(f"{real_name} 的昵称：{', '.join(nicks)}")
+        
+    async def _list_catchphrase_logic(self, event: AstrMessageEvent):
+        """/list catchphrase 的内部实现"""
+        cps = self.db.data.get("catchphrases", {})
+        if not cps:
+            yield event.plain_result("暂时没有应援口号。")
+            return
+        
+        msg = "📜 应援口号列表：\n"
+        for trig, data in cps.items():
+            idol = data.get("idol", "未知")
+            msg += f"• '{trig}' -> {idol}\n"
+        yield event.plain_result(msg)
+
+    # ================= 管理命令 =================
+
+    def _is_admin(self, user_id):
+        """检查用户是否为管理员"""
+        return str(user_id) in self.db.data.get("admins", [])
+
+    @filter.command("auth")
+    async def cmd_auth(self, event: AstrMessageEvent):
+        """/auth <QQ ID> - 添加授权用户"""
+        user_id = str(event.get_sender_id())
+        args = event.message_str.split()[1:]
+
+        if not self._is_admin(user_id):
+            yield event.plain_result("你没有权限进行此操作。")
+            return
+
+        if not args:
+            yield event.plain_result("格式：/auth <QQ ID>")
+            return
+
+        target_id = args[0].strip()
+        if not target_id:
+            yield event.plain_result("QQ ID 不能为空。")
+            return
+            
+        admins = self.db.data.setdefault("admins", [])
+        if target_id not in admins:
+            admins.append(target_id)
+            self.db.save("admins")
+            yield event.plain_result(f"已授权用户：{target_id}")
+        else:
+            yield event.plain_result(f"用户 {target_id} 已经是管理员了。")
+
+    @filter.command("rauth")
+    async def cmd_rauth(self, event: AstrMessageEvent):
+        """/rauth <QQ ID> - 移除授权用户"""
+        user_id = str(event.get_sender_id())
+        args = event.message_str.split()[1:]
+
+        if not self._is_admin(user_id):
+            yield event.plain_result("你没有权限进行此操作。")
+            return
+
+        if not args:
+            yield event.plain_result("格式：/rauth <QQ ID>")
+            return
+
+        target_id = args[0].strip()
+        if not target_id:
+            yield event.plain_result("QQ ID 不能为空。")
+            return
+            
+        admins = self.db.data.get("admins", [])
+        if target_id in admins:
+            admins.remove(target_id)
+            self.db.save("admins")
+            yield event.plain_result(f"已移除授权用户：{target_id}")
+        else:
+            yield event.plain_result(f"用户 {target_id} 不是管理员。")
+            
+    @filter.command("group")
+    async def cmd_group_manage(self, event: AstrMessageEvent):
+        """群组管理命令占位"""
+        if not self._is_admin(str(event.get_sender_id())):
+             yield event.plain_result("你没有权限进行此操作。")
+             return
+             
+        yield event.plain_result("群组管理功能已识别。请根据具体需求实现子命令逻辑（add/update/info/list）。")
+
+    # ================= 基础帮助 =================
+    
+    @filter.command("help")
+    async def cmd_help(self, event: AstrMessageEvent):
+        """显示此帮助信息"""
+        help_text = (
+            "🤖 idol Bot  命令列表：\n"
+            "----------------------------\n"
+            "1. 互动与查询：\n"
+            "/qd - 每日签到，领取今日宝宝\n"
+            "/xox <名字/昵称> - 查询小偶像档案\n"
+            "   (触发口号可回复对应图片)\n"
+            "2. 数据管理：\n"
+            "/add <姓名> <昵称> - 添加昵称\n"
+            "/add catchphrase -i <名> -t <触发> -r <响应> - 添加口号\n"
+            "/list <姓名> - 列出偶像昵称\n"
+            "/list catchphrase - 列出所有口号\n"
+            "3. 管理员命令 (仅限授权用户)：\n"
+            "/auth <QQ ID> - 添加授权用户\n"
+            "/rauth <QQ ID> - 移除授权用户\n"
+            "/group <sub_cmd> - 群组管理\n"
+        )
+        yield event.plain_result(help_text)
 
     async def terminate(self):
-        """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
+        logger.info("idol bot 插件已销毁。")
