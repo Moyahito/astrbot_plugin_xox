@@ -1,6 +1,6 @@
 import os
 import datetime
-from astrbot.api.event import filter, AstrMessageEvent, EventMessageType
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api.message_components import Plain, At, Image
 from astrbot.api import logger
@@ -22,7 +22,7 @@ class SixSixBot(Star):
 
     # ================= 核心消息监听 (用于处理口号触发) =================
     
-    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
+    @filter.event_message_type("GROUP_MESSAGE")
     async def passive_catchphrase_handler(self, event: AstrMessageEvent):
         """检查非指令消息中是否包含应援口号触发句"""
         msg_str = event.message_str.strip()
