@@ -1,0 +1,41 @@
+{
+  "enable_catchphrase": {
+    "description": "是否启用口号触发功能",
+    "type": "bool",
+    "default": true,
+    "hint": "当设置为 false 时，机器人不会响应群聊中的应援口号"
+  },
+  "image_formats": {
+    "description": "支持的图片格式",
+    "type": "list",
+    "default": [".png", ".jpg", ".jpeg", ".gif", ".bmp"],
+    "hint": "插件支持的图片文件格式列表，用于筛选图片文件",
+    "options": [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"]
+  },
+  "default_messages": {
+    "description": "默认提示信息",
+    "type": "object",
+    "hint": "自定义插件的默认提示信息",
+    "items": {
+      "no_image": {
+        "description": "没有图片时的提示",
+        "type": "string",
+        "default": "暂时还没有解锁这位小偶像哦。",
+        "hint": "当找不到图片时显示的提示信息"
+      },
+      "already_checkin": {
+        "description": "已签到的提示",
+        "type": "string",
+        "default": "你今天已经签到过了哦~",
+        "hint": "用户重复签到时的提示信息"
+      },
+      "no_idol": {
+        "description": "没有偶像时的提示",
+        "type": "string",
+        "default": "还没有添加任何小偶像，无法签到！请先用 /add 添加。",
+        "hint": "没有添加任何偶像时签到失败的提示"
+      }
+    }
+  }
+}
+

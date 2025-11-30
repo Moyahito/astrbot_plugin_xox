@@ -2,11 +2,11 @@ import os
 import datetime
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
-from astrbot.api.message_components import Plain, At, Image
+import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from .data_manager import DataManager # 导入数据管理器
 
-@register("idol Bot", "Moyahito", "idol bot偶像互动插件精简版", "1.0.0")
+@register("idol Bot", "Moyahito", "idol bot偶像互动插件精简版", "1.0.0", "https://github.com/Moyahito/astrbot_plugin_xox")
 class SixSixBot(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -15,16 +15,22 @@ class SixSixBot(Star):
         plugin_name = os.path.basename(self.plugin_dir)
         data_dir = os.path.dirname(os.path.dirname(self.plugin_dir))  # 向上两级到 data 目录
         self.plugin_data_dir = os.path.join(data_dir, "plugin_data", plugin_name)
-        self.db = DataManager(self.plugin_dir, self.plugin_data_dir)
+        # 读取配置
+        self.config = context.config or {}
+        self.db = DataManager(self.plugin_dir, self.plugin_data_dir, self.config)
 
     async def initialize(self):
         logger.info("idol bot 插件初始化完成。")
 
     # ================= 核心消息监听 (用于处理口号触发) =================
     
-    @filter.event_message_type("GROUP_MESSAGE")
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def passive_catchphrase_handler(self, event: AstrMessageEvent):
         """检查非指令消息中是否包含应援口号触发句"""
+        # 检查是否启用口号触发功能
+        if not self.config.get("enable_catchphrase", True):
+            return
+            
         msg_str = event.message_str.strip()
         
         if msg_str.startswith("/"):
@@ -44,14 +50,15 @@ class SixSixBot(Star):
                 img_path = self.db.get_random_image_path(idol_name)
                 
                 chain = [
-                    At(qq=user_id),
-                    Plain(f"\n{response_txt}")
+                    Comp.At(qq=user_id),
+                    Comp.Plain(f"\n{response_txt}")
                 ]
                 
                 if img_path and os.path.exists(img_path):
-                    chain.append(Image.fromFileSystem(img_path))
+                    chain.append(Comp.Image.fromFileSystem(img_path))
                 else:
-                    chain.append(Plain("\n暂时还没有解锁这位小偶像哦。"))
+                    no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
+                    chain.append(Comp.Plain(f"\n{no_image_msg}"))
 
                 yield event.chain_result(chain)
                 return 
@@ -67,12 +74,18 @@ class SixSixBot(Star):
         
         user_record = self.db.data.get("users", {}).get(user_id, {})
         if user_record.get("last_checkin") == today:
-            yield event.plain_result(f"@{user_name}\n你今天已经签到过了哦~")
+            already_msg = self.config.get("default_messages", {}).get("already_checkin", "你今天已经签到过了哦~")
+            chain = [
+                Comp.At(qq=user_id),
+                Comp.Plain(f"\n{already_msg}")
+            ]
+            yield event.chain_result(chain)
             return
 
         lucky_idol = self.db.get_random_idol()
         if not lucky_idol:
-            yield event.plain_result("还没有添加任何小偶像，无法签到！请先用 /add 添加。")
+            no_idol_msg = self.config.get("default_messages", {}).get("no_idol", "还没有添加任何小偶像，无法签到！请先用 /add 添加。")
+            yield event.plain_result(no_idol_msg)
             return
 
         img_path = self.db.get_random_image_path(lucky_idol)
@@ -86,14 +99,15 @@ class SixSixBot(Star):
         ]
         
         chain = [
-            At(qq=user_id),
-            Plain(f"\n{text_lines[0]}\n{text_lines[1]}")
+            Comp.At(qq=user_id),
+            Comp.Plain(f"\n{text_lines[0]}\n{text_lines[1]}")
         ]
         
         if img_path and os.path.exists(img_path):
-            chain.append(Image.fromFileSystem(img_path))
+            chain.append(Comp.Image.fromFileSystem(img_path))
         else:
-            chain.append(Plain("\n暂时还没有解锁这位小偶像哦。"))
+            no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
+            chain.append(Comp.Plain(f"\n{no_image_msg}"))
 
         yield event.chain_result(chain)
 
@@ -259,15 +273,12 @@ class SixSixBot(Star):
         """检查用户是否为管理员"""
         return str(user_id) in self.db.data.get("admins", [])
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("auth")
     async def cmd_auth(self, event: AstrMessageEvent):
         """/auth <QQ ID> - 添加授权用户"""
         user_id = str(event.get_sender_id())
         args = event.message_str.split()[1:]
-
-        if not self._is_admin(user_id):
-            yield event.plain_result("你没有权限进行此操作。")
-            return
 
         if not args:
             yield event.plain_result("格式：/auth <QQ ID>")
@@ -286,15 +297,12 @@ class SixSixBot(Star):
         else:
             yield event.plain_result(f"用户 {target_id} 已经是管理员了。")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("rauth")
     async def cmd_rauth(self, event: AstrMessageEvent):
         """/rauth <QQ ID> - 移除授权用户"""
         user_id = str(event.get_sender_id())
         args = event.message_str.split()[1:]
-
-        if not self._is_admin(user_id):
-            yield event.plain_result("你没有权限进行此操作。")
-            return
 
         if not args:
             yield event.plain_result("格式：/rauth <QQ ID>")
@@ -313,13 +321,10 @@ class SixSixBot(Star):
         else:
             yield event.plain_result(f"用户 {target_id} 不是管理员。")
             
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("group")
     async def cmd_group_manage(self, event: AstrMessageEvent):
         """群组管理命令占位"""
-        if not self._is_admin(str(event.get_sender_id())):
-             yield event.plain_result("你没有权限进行此操作。")
-             return
-             
         yield event.plain_result("群组管理功能已识别。请根据具体需求实现子命令逻辑（add/update/info/list）。")
 
     # ================= 基础帮助 =================

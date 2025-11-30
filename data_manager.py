@@ -4,7 +4,7 @@ import random
 import logging
 
 class DataManager:
-    def __init__(self, plugin_dir, plugin_data_dir=None):
+    def __init__(self, plugin_dir, plugin_data_dir=None, config=None):
         # 设置数据和图片目录
         self.data_dir = os.path.join(plugin_dir, "data")
         # 如果指定了 plugin_data_dir，使用它作为图片目录；否则使用插件目录下的 img
@@ -14,6 +14,11 @@ class DataManager:
             self.img_dir = os.path.join(plugin_dir, "img")
         os.makedirs(self.data_dir, exist_ok=True)
         os.makedirs(self.img_dir, exist_ok=True)
+        
+        # 读取配置
+        self.config = config or {}
+        # 获取图片格式配置，默认为常见格式
+        self.image_formats = self.config.get("image_formats", [".png", ".jpg", ".jpeg", ".gif", ".bmp"])
 
         # 文件路径
         self.files = {
@@ -95,9 +100,9 @@ class DataManager:
             return None
         
         try:
-            # 筛选图片文件
+            # 筛选图片文件，使用配置的图片格式
             images = [f for f in os.listdir(folder_path) 
-                     if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
+                     if any(f.lower().endswith(fmt.lower()) for fmt in self.image_formats)]
             
             if not images:
                 return None
