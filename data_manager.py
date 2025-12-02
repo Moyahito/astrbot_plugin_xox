@@ -35,8 +35,7 @@ class DataManager:
 
         # 文件路径
         self.files = {
-            "idols": os.path.join(self.data_dir, "idols.json"),         # 偶像名单、昵称、简介
-            "catchphrases": os.path.join(self.data_dir, "catchphrases.json"), # 应援口号
+            "idols": os.path.join(self.data_dir, "idols.json"),         # 偶像名单、昵称、简介、应援口号
             "users": os.path.join(self.data_dir, "users.json"),         # 签到记录
             "groups": os.path.join(self.data_dir, "groups.json"),       # 群组信息 (占位)
             "admins": os.path.join(self.data_dir, "admins.json")        # 授权管理员
@@ -92,7 +91,8 @@ class DataManager:
             # 默认信息字段，供 /xox 使用
             idols[name] = {
                 "nicknames": [],
-                "info": "这个人很神秘，目前还没有公开资料，等待管理员补充。"
+                "info": "这个人很神秘，目前还没有公开资料，等待管理员补充。",
+                "catchphrases": {}  # 应援口号：{"触发句": "响应内容"}
             }
             self.save("idols")
             # 自动创建图片文件夹

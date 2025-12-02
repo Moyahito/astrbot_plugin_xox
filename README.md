@@ -22,8 +22,51 @@ A plugin for AstrBot plugin feature
 ## 🛠️ 安装与配置
 
 1.  **文件放置：** 确保 `main.py` 和 `data_manager.py` 文件位于 `astrbot/astrbot/data/plugin/astrbot_plugin_xox/` 目录下。
-2.  **图片资源：** 图片会自动存储在 `astrbot/astrbot/data/plugin_data/astrbot_plugin_xox/` 目录下。当你使用 `/add` 命令添加一位xox（例如：乔诗然）后，系统会自动创建同名文件夹 (`plugin_data/astrbot_plugin_xox/乔诗然/`)。请手动将xox的美图放进去，这样签到和口号触发时才能发送图片哦！
-3.  **管理员设置：** 首次使用，请手动打开 `data/admins.json` 文件，将你的 QQ ID 添加进去，以便使用管理命令。
+2.  **预制数据（推荐）：** 
+    
+    **a) 预制 xox 名单、昵称和应援口号（统一在一个文件中）：**
+    - 数据文件：`data/idols.json`
+    - 格式示例：
+      ```json
+      {
+        "乔诗然": {
+          "nicknames": ["乔乔", "诗然", "小乔"],
+          "info": "温柔可爱的小偶像，擅长唱歌和跳舞。",
+          "catchphrases": {
+            "好想乔诗然": "我也好想你呀~今天也要加油哦！",
+            "乔乔在哪里": "我在这里呢！有什么需要我帮忙的吗？"
+          }
+        },
+        "林小语": {
+          "nicknames": ["小语", "语语"],
+          "info": "活泼开朗的元气少女。",
+          "catchphrases": {
+            "小语最可爱": "谢谢夸奖~你也很可爱呢！"
+          }
+        }
+      }
+      ```
+    - 参考 `data/idols.json.example` 示例文件
+    - **说明：**
+      - `nicknames`: 昵称列表，用于通过昵称查找偶像
+      - `info`: 偶像的简介信息，通过 `/xox` 命令查看
+      - `catchphrases`: 应援口号字典，key 是触发句，value 是响应内容
+    
+    **b) 添加图片：**
+    - 添加后记得在对应的图片目录（`plugin_data/astrbot_plugin_xox/偶像名/`）中放入图片
+3.  **图片资源：** 图片存储在 `astrbot/astrbot/data/plugin_data/astrbot_plugin_xox/` 目录下。每个xox都有独立的文件夹（例如：`plugin_data/astrbot_plugin_xox/乔诗然/`）。请将xox的美图放入对应文件夹，这样签到和口号触发时才能发送图片哦！
+4.  **管理员设置：** 
+    - 数据文件：`data/admins.json`
+    - 格式：JSON 数组，包含管理员的 QQ ID（字符串格式）
+    - 示例：
+      ```json
+      [
+        "123456789",
+        "987654321"
+      ]
+      ```
+    - 参考 `data/admins.json.example` 示例文件
+    - 首次使用请手动编辑此文件，添加你的 QQ ID，以便使用管理命令（`/auth`, `/rauth` 等）
 
 ## 🤝 支持
 

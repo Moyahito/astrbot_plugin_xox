@@ -46,44 +46,41 @@ class SixSixBot(Star):
 
     # ================= 核心消息监听 (用于处理口号触发) =================
     
-    @filter.event_message_type("GROUP_MESSAGE")
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def passive_catchphrase_handler(self, event: AstrMessageEvent):
         """检查非指令消息中是否包含应援口号触发句"""
         # 检查是否启用口号触发功能
         if not self.config.get("enable_catchphrase", True):
             return
-            
-        msg_str = event.message_str.strip()
         
+        # 跳过指令消息（以 / 开头）
+        msg_str = event.message_str.strip()
         if msg_str.startswith("/"):
             return
 
-        triggers = self.db.data.get("catchphrases", {})
-        
-        for trigger_txt, data in triggers.items():
-            if trigger_txt in msg_str:
-                user_id = event.get_sender_id()
-                idol_name = data.get("idol")
-                response_txt = data.get("resp", "")
-                
-                if not idol_name:
-                    continue
-                
-                img_path = self.db.get_random_image_path(idol_name)
-                
-                chain = [
-                    Comp.At(qq=user_id),
-                    Comp.Plain(f"\n{response_txt}")
-                ]
-                
-                if img_path and os.path.exists(img_path):
-                    chain.append(Comp.Image.fromFileSystem(img_path))
-                else:
-                    no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
-                    chain.append(Comp.Plain(f"\n{no_image_msg}"))
+        # 遍历所有偶像的应援口号
+        idols = self.db.data.get("idols", {})
+        for idol_name, idol_data in idols.items():
+            catchphrases = idol_data.get("catchphrases", {})
+            for trigger_txt, response_txt in catchphrases.items():
+                if trigger_txt in msg_str:
+                    user_id = event.get_sender_id()
+                    
+                    img_path = self.db.get_random_image_path(idol_name)
+                    
+                    chain = [
+                        Comp.At(qq=user_id),
+                        Comp.Plain(f"\n{response_txt}")
+                    ]
+                    
+                    if img_path and os.path.exists(img_path):
+                        chain.append(Comp.Image.fromFileSystem(img_path))
+                    else:
+                        no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
+                        chain.append(Comp.Plain(f"\n{no_image_msg}"))
 
-                yield event.chain_result(chain)
-                return 
+                    yield event.chain_result(chain)
+                    return 
 
     # ================= 签到系统 =================
     
@@ -204,7 +201,11 @@ class SixSixBot(Star):
         idols = self.db.data.get("idols", {})
         if real_name not in idols:
             # 如果 add_idol 失败，确保记录存在
-            idols[real_name] = {"nicknames": [], "info": "这个人很神秘，目前还没有公开资料，等待管理员补充。"}
+            idols[real_name] = {
+                "nicknames": [],
+                "info": "这个人很神秘，目前还没有公开资料，等待管理员补充。",
+                "catchphrases": {}
+            }
         
         nicknames = idols[real_name].get("nicknames", [])
         if nickname not in nicknames:
@@ -239,11 +240,19 @@ class SixSixBot(Star):
             yield event.plain_result(f"找不到偶像 {idol_input}，请先使用 /add 注册。")
             return
 
-        self.db.data.setdefault("catchphrases", {})[trigger] = {
-            "idol": real_name,
-            "resp": resp
-        }
-        self.db.save("catchphrases")
+        # 确保偶像记录存在
+        self.db.add_idol(real_name)
+        idols = self.db.data.get("idols", {})
+        if real_name not in idols:
+            idols[real_name] = {
+                "nicknames": [],
+                "info": "这个人很神秘，目前还没有公开资料，等待管理员补充。",
+                "catchphrases": {}
+            }
+        
+        # 添加应援口号到对应偶像的 catchphrases 中
+        idols[real_name].setdefault("catchphrases", {})[trigger] = resp
+        self.db.save("idols")
         
         yield event.plain_result(f"添加成功！\n触发：{trigger}\n回复：{resp}\n关联偶像：{real_name}")
 
@@ -278,13 +287,19 @@ class SixSixBot(Star):
         
     async def _list_catchphrase_logic(self, event: AstrMessageEvent):
         """/list catchphrase 的内部实现"""
-        cps = self.db.data.get("catchphrases", {})
-        if not cps:
+        idols = self.db.data.get("idols", {})
+        all_catchphrases = {}
+        for idol_name, idol_data in idols.items():
+            catchphrases = idol_data.get("catchphrases", {})
+            for trigger, response in catchphrases.items():
+                all_catchphrases[trigger] = {"idol": idol_name, "resp": response}
+        
+        if not all_catchphrases:
             yield event.plain_result("暂时没有应援口号。")
             return
         
         msg = "📜 应援口号列表：\n"
-        for trig, data in cps.items():
+        for trig, data in all_catchphrases.items():
             idol = data.get("idol", "未知")
             msg += f"• '{trig}' -> {idol}\n"
         yield event.plain_result(msg)
