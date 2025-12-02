@@ -44,6 +44,48 @@ class SixSixBot(Star):
 
     async def initialize(self):
         logger.info("SixSixBot 插件初始化完成。")
+    
+    def _build_reply_chain(self, event: AstrMessageEvent, user_id: str, text: str, img_path: str = None):
+        """
+        构建回复消息链：引用原消息 + @用户 + 换行 + 文字 + 图片
+        
+        Args:
+            event: 消息事件对象
+            user_id: 要@的用户ID
+            text: 回复文字内容
+            img_path: 图片路径（可选）
+        
+        Returns:
+            消息链列表
+        """
+        chain = []
+        
+        # 尝试添加引用（Reply组件）
+        try:
+            if hasattr(event, 'message_obj') and hasattr(event.message_obj, 'message_id'):
+                # 尝试导入Reply组件
+                try:
+                    Reply = getattr(Comp, 'Reply', None)
+                    if Reply:
+                        chain.append(Reply(message_id=event.message_obj.message_id))
+                except:
+                    pass
+        except:
+            pass
+        
+        # @用户
+        chain.append(Comp.At(qq=user_id))
+        # 换行 + 文字
+        chain.append(Comp.Plain(f"\n{text}"))
+        
+        # 添加图片或提示
+        if img_path and os.path.exists(img_path):
+            chain.append(Comp.Image.fromFileSystem(img_path))
+        else:
+            no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
+            chain.append(Comp.Plain(f"\n{no_image_msg}"))
+        
+        return chain
 
     # ================= 核心消息监听 (用于处理口号触发) =================
     
@@ -78,27 +120,13 @@ class SixSixBot(Star):
                     f"{today_idol}把对你的思念写成了诗，每一句都是爱意~"
                 ]
                 response_txt = random.choice(miss_templates)
-                
                 img_path = self.db.get_random_image_path(today_idol)
-                chain = [
-                    Comp.At(qq=user_id),
-                    Comp.Plain(f"\n{response_txt}")
-                ]
-                
-                if img_path and os.path.exists(img_path):
-                    chain.append(Comp.Image.fromFileSystem(img_path))
-                else:
-                    no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
-                    chain.append(Comp.Plain(f"\n{no_image_msg}"))
-                
+                chain = self._build_reply_chain(event, user_id, response_txt, img_path)
                 yield event.chain_result(chain)
                 return
             else:
                 # 用户今天还没签到，提示先签到
-                chain = [
-                    Comp.At(qq=user_id),
-                    Comp.Plain(f"\n你还没有签到呢~先使用 /qd 签到领取今天的宝宝吧！")
-                ]
+                chain = self._build_reply_chain(event, user_id, "你还没有签到呢~先使用 /qd 签到领取今天的宝宝吧！")
                 yield event.chain_result(chain)
                 return
 
@@ -129,27 +157,13 @@ class SixSixBot(Star):
                         if today_idol:
                             # 用户今天已签到，提示关心自己的宝宝
                             response_txt = f"这不是你的宝宝哦，这是别人的宝宝。请多多关心{today_idol}吧！"
-                            
                             img_path = self.db.get_random_image_path(today_idol)
-                            chain = [
-                                Comp.At(qq=user_id),
-                                Comp.Plain(f"\n{response_txt}")
-                            ]
-                            
-                            if img_path and os.path.exists(img_path):
-                                chain.append(Comp.Image.fromFileSystem(img_path))
-                            else:
-                                no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
-                                chain.append(Comp.Plain(f"\n{no_image_msg}"))
-                            
+                            chain = self._build_reply_chain(event, user_id, response_txt, img_path)
                             yield event.chain_result(chain)
                             return
                         else:
                             # 用户今天还没签到，提示先签到
-                            chain = [
-                                Comp.At(qq=user_id),
-                                Comp.Plain(f"\n这不是你的宝宝哦，这是别人的宝宝。先使用 /qd 签到领取今天的宝宝吧！")
-                            ]
+                            chain = self._build_reply_chain(event, user_id, "这不是你的宝宝哦，这是别人的宝宝。先使用 /qd 签到领取今天的宝宝吧！")
                             yield event.chain_result(chain)
                             return
                     # 如果XXX没有被任何人签到过，继续正常的应援口号处理流程（不return，让代码继续执行）
@@ -164,18 +178,7 @@ class SixSixBot(Star):
                 if trigger_txt in msg_str:
                     catchphrase_matched = True
                     img_path = self.db.get_random_image_path(idol_name)
-                    
-                    chain = [
-                        Comp.At(qq=user_id),
-                        Comp.Plain(f"\n{response_txt}")
-                    ]
-                    
-                    if img_path and os.path.exists(img_path):
-                        chain.append(Comp.Image.fromFileSystem(img_path))
-                    else:
-                        no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
-                        chain.append(Comp.Plain(f"\n{no_image_msg}"))
-
+                    chain = self._build_reply_chain(event, user_id, response_txt, img_path)
                     yield event.chain_result(chain)
                     return
         
@@ -204,19 +207,8 @@ class SixSixBot(Star):
                             f"{real_name}也想和你见面呢~"
                         ]
                         response_txt = random.choice(miss_templates)
-                        
                         img_path = self.db.get_random_image_path(real_name)
-                        chain = [
-                            Comp.At(qq=user_id),
-                            Comp.Plain(f"\n{response_txt}")
-                        ]
-                        
-                        if img_path and os.path.exists(img_path):
-                            chain.append(Comp.Image.fromFileSystem(img_path))
-                        else:
-                            no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
-                            chain.append(Comp.Plain(f"\n{no_image_msg}"))
-                        
+                        chain = self._build_reply_chain(event, user_id, response_txt, img_path)
                         yield event.chain_result(chain)
                         return 
 
@@ -235,27 +227,14 @@ class SixSixBot(Star):
             today_idol = user_record.get("today_idol")
             if today_idol:
                 already_msg = self.config.get("default_messages", {}).get("already_checkin", "你今天已经签到过了哦~")
-                chain = [
-                    Comp.At(qq=user_id),
-                    Comp.Plain(f"\n{already_msg}\n你的宝宝是：{today_idol}")
-                ]
-                
-                # 获取今天分配的xox的图片
+                response_txt = f"{already_msg}\n你的宝宝是：{today_idol}"
                 img_path = self.db.get_random_image_path(today_idol)
-                if img_path and os.path.exists(img_path):
-                    chain.append(Comp.Image.fromFileSystem(img_path))
-                else:
-                    no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
-                    chain.append(Comp.Plain(f"\n{no_image_msg}"))
-                
+                chain = self._build_reply_chain(event, user_id, response_txt, img_path)
                 yield event.chain_result(chain)
             else:
                 # 如果没有保存今天分配的xox（可能是旧数据），只显示文字
                 already_msg = self.config.get("default_messages", {}).get("already_checkin", "你今天已经签到过了哦~")
-                chain = [
-                    Comp.At(qq=user_id),
-                    Comp.Plain(f"\n{already_msg}")
-                ]
+                chain = self._build_reply_chain(event, user_id, already_msg)
                 yield event.chain_result(chain)
             return
 
@@ -274,22 +253,8 @@ class SixSixBot(Star):
         }
         self.db.save("users")
 
-        text_lines = [
-            "签到成功！",
-            f"今天你的宝宝是：{lucky_idol}"
-        ]
-        
-        chain = [
-            Comp.At(qq=user_id),
-            Comp.Plain(f"\n{text_lines[0]}\n{text_lines[1]}")
-        ]
-        
-        if img_path and os.path.exists(img_path):
-            chain.append(Comp.Image.fromFileSystem(img_path))
-        else:
-            no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
-            chain.append(Comp.Plain(f"\n{no_image_msg}"))
-
+        response_txt = f"签到成功！\n今天你的宝宝是：{lucky_idol}"
+        chain = self._build_reply_chain(event, user_id, response_txt, img_path)
         yield event.chain_result(chain)
 
     # ================= 小偶像信息查询与管理 =================
