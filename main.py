@@ -23,21 +23,22 @@ from .data_manager import DataManager
 class SixSixBot(Star):
     """idol Bot 插件主类"""
     
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config=None, **kwargs):
         """
         初始化插件
         
         Args:
             context: AstrBot 提供的上下文对象，包含配置等信息
         """
-        super().__init__(context)
+        super().__init__(context, config=config, **kwargs)
         self.plugin_dir = os.path.dirname(__file__)
         # 计算 plugin_data 目录路径：从 plugin 目录向上两级到 data，然后进入 plugin_data，再进入同名文件夹
         plugin_name = os.path.basename(self.plugin_dir)
         data_dir = os.path.dirname(os.path.dirname(self.plugin_dir))  # 向上两级到 data 目录
         self.plugin_data_dir = os.path.join(data_dir, "plugin_data", plugin_name)
         # 读取配置（从 _conf_schema.json 解析的配置）
-        self.config = context.config or {}
+        # 新版 AstrBot 会在实例化时通过 config 参数传入配置
+        self.config = config or {}
         # 初始化数据管理器（数据存储在 data 目录下，防止更新插件时丢失）
         self.db = DataManager(self.plugin_dir, self.plugin_data_dir, self.config)
 
