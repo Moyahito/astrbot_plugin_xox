@@ -527,18 +527,24 @@ class SixSixBot(Star):
         today = datetime.date.today().isoformat()
         users_data = self.db.data.get("users", {})
         
-        # 统计今天签到的用户数量
+        # 统计今天签到的用户数量，并收集需要删除的用户ID
         reset_count = 0
+        users_to_delete = []
+        
+        # 先遍历收集需要处理的数据
         for user_id, user_record in users_data.items():
             if user_record.get("last_checkin") == today:
                 reset_count += 1
                 # 清除今天的签到记录
-                if "last_checkin" in user_record and user_record["last_checkin"] == today:
-                    user_record.pop("last_checkin", None)
-                    user_record.pop("today_idol", None)
-                    # 如果用户记录为空，可以删除整个记录
-                    if not user_record:
-                        users_data.pop(user_id, None)
+                user_record.pop("last_checkin", None)
+                user_record.pop("today_idol", None)
+                # 如果用户记录为空，标记为需要删除
+                if not user_record:
+                    users_to_delete.append(user_id)
+        
+        # 遍历完成后再删除空记录
+        for user_id in users_to_delete:
+            users_data.pop(user_id, None)
         
         # 保存数据
         self.db.save("users")
