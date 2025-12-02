@@ -1,5 +1,7 @@
 # 💖 SixSixBot
 
+灵感来源于miu，向miu致敬！
+
 A plugin for AstrBot plugin feature
 
 ## ✨ 插件简介
