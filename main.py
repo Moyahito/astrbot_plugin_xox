@@ -13,8 +13,8 @@ idol Bot 插件 - 偶像互动与签到系统
 """
 import os
 import datetime
-from astrbot.api.event import filter, AstrMessageEvent, EventMessageType
-from astrbot.api.star import Context, Star
+from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
+from astrbot.api.star import Context, Star, register
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from .data_manager import DataManager
@@ -46,7 +46,7 @@ class SixSixBot(Star):
 
     # ================= 核心消息监听 (用于处理口号触发) =================
     
-    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
+    @filter.event_message_type("GROUP_MESSAGE")
     async def passive_catchphrase_handler(self, event: AstrMessageEvent):
         """检查非指令消息中是否包含应援口号触发句"""
         # 检查是否启用口号触发功能
