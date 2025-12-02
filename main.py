@@ -173,9 +173,28 @@ class SixSixBot(Star):
         # 遍历所有偶像的应援口号
         idols = self.db.data.get("idols", {})
         catchphrase_matched = False
+        
+        # 如果消息是"好想XXX"格式，先提取目标名字
+        target_name_for_match = None
+        if (msg_str.startswith("好想") or msg_str.startswith("想")) and "宝宝" not in msg_str:
+            target_name_for_match = msg_str.replace("好想", "").replace("想", "").strip()
+        
         for idol_name, idol_data in idols.items():
             catchphrases = idol_data.get("catchphrases", {})
+            # 获取该偶像的所有昵称（包括自定义添加的昵称）
+            nicknames = idol_data.get("nicknames", [])
+            all_names = [idol_name] + nicknames  # 真实姓名 + 所有昵称（包括自定义昵称）
+            
+            # 检查目标名字是否是该偶像的名字或昵称（包括自定义昵称）
+            is_target_idol = False
+            if target_name_for_match:
+                # 使用 get_real_name 确保能匹配到自定义昵称
+                real_name = self.db.get_real_name(target_name_for_match)
+                if real_name == idol_name:
+                    is_target_idol = True
+            
             for trigger_txt, response_txt in catchphrases.items():
+                # 检查触发句是否匹配消息
                 if trigger_txt in msg_str:
                     catchphrase_matched = True
                     img_path = self.db.get_random_image_path(idol_name)
@@ -185,6 +204,19 @@ class SixSixBot(Star):
                     else:
                         yield event.chain_result(chain)
                     return
+            
+            # 额外检查：如果消息是"好想XXX"格式，且XXX是该偶像的名字或昵称（包括自定义昵称），也触发应援口号
+            if target_name_for_match and is_target_idol and catchphrases:
+                # 使用第一个应援口号，或者可以随机选择一个
+                first_catchphrase = next(iter(catchphrases.values()))
+                catchphrase_matched = True
+                img_path = self.db.get_random_image_path(idol_name)
+                chain = self._build_reply_chain(event, user_id, first_catchphrase, img_path)
+                if hasattr(event, 'reply'):
+                    yield event.reply(chain)
+                else:
+                    yield event.chain_result(chain)
+                return
         
         # 如果"好想XXX"但没有匹配到应援口号，且XXX没有被签到过，提供默认回复
         if (msg_str.startswith("好想") or msg_str.startswith("想")) and "宝宝" not in msg_str and not catchphrase_matched:
