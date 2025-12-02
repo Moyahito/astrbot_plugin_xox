@@ -1,5 +1,7 @@
 # 💖 SixSixBot
 
+> 致敬传奇粉丝 miu，感谢你带来的灵感与创意 ✨
+
 A plugin for AstrBot plugin feature
 
 ## ✨ 插件简介
