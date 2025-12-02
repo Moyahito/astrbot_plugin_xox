@@ -78,7 +78,7 @@ class SixSixBot(Star):
     # ================= 核心消息监听 (用于处理口号触发) =================
     
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
-    async def passive_catchphrase_handler(self, event: AstrMessageEvent, *args, **kwargs):
+    async def passive_catchphrase_handler(self, event: AstrMessageEvent):
         """检查非指令消息中是否包含应援口号触发句"""
         # 检查是否启用口号触发功能
         if not self.config.get("enable_catchphrase", True):
