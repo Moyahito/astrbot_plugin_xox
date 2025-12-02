@@ -1,5 +1,5 @@
 """
-idol Bot 插件 - 偶像互动与签到系统
+SixSixBot 插件 - 偶像互动与签到系统
 
 功能：
 - 每日签到领取专属"宝宝"
@@ -20,7 +20,7 @@ from astrbot.api import logger
 from .data_manager import DataManager
 
 class SixSixBot(Star):
-    """idol Bot 插件主类"""
+    """SixSixBot 插件主类"""
     
     def __init__(self, context: Context, config=None, **kwargs):
         """
@@ -42,7 +42,7 @@ class SixSixBot(Star):
         self.db = DataManager(self.plugin_dir, self.plugin_data_dir, self.config)
 
     async def initialize(self):
-        logger.info("idol bot 插件初始化完成。")
+        logger.info("SixSixBot 插件初始化完成。")
 
     # ================= 核心消息监听 (用于处理口号触发) =================
     
@@ -355,7 +355,7 @@ class SixSixBot(Star):
     async def cmd_help(self, event: AstrMessageEvent):
         """显示此帮助信息"""
         help_text = (
-            "🤖 idol Bot  命令列表：\n"
+            "🤖 SixSixBot  命令列表：\n"
             "----------------------------\n"
             "1. 互动与查询：\n"
             "/qd - 每日签到，领取今日宝宝\n"
@@ -374,4 +374,4 @@ class SixSixBot(Star):
         yield event.plain_result(help_text)
 
     async def terminate(self):
-        logger.info("idol bot 插件已销毁。")
+        logger.info("SixSixBot 插件已销毁。")
