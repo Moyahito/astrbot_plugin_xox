@@ -1,10 +1,10 @@
 """
-SixSixBot 插件 - 偶像互动与签到系统
+SixSixBot 插件 - 小偶像互动与签到系统
 
 功能：
 - 每日签到领取专属"宝宝"
 - 应援口号触发回复
-- 偶像信息查询与管理
+- 小偶像信息查询与管理
 - 管理员权限控制
 
 数据存储：
@@ -14,8 +14,8 @@ SixSixBot 插件 - 偶像互动与签到系统
 import os
 import datetime
 import random
-from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
-from astrbot.api.star import Context, Star, register
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.star import Context, Star
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from .data_manager import DataManager
@@ -170,7 +170,7 @@ class SixSixBot(Star):
                     # 如果XXX没有被任何人签到过，继续正常的应援口号处理流程（不return，让代码继续执行）
                 # 如果找不到这个XXX，也继续正常的应援口号处理流程
 
-        # 遍历所有偶像的应援口号
+        # 遍历所有小偶像的应援口号
         idols = self.db.data.get("idols", {})
         catchphrase_matched = False
         
@@ -181,11 +181,11 @@ class SixSixBot(Star):
         
         for idol_name, idol_data in idols.items():
             catchphrases = idol_data.get("catchphrases", {})
-            # 获取该偶像的所有昵称（包括自定义添加的昵称）
+            # 获取该小偶像的所有昵称（包括自定义添加的昵称）
             nicknames = idol_data.get("nicknames", [])
             all_names = [idol_name] + nicknames  # 真实姓名 + 所有昵称（包括自定义昵称）
             
-            # 检查目标名字是否是该偶像的名字或昵称（包括自定义昵称）
+            # 检查目标名字是否是该小偶像的名字或昵称（包括自定义昵称）
             is_target_idol = False
             if target_name_for_match:
                 # 使用 get_real_name 确保能匹配到自定义昵称
@@ -205,7 +205,7 @@ class SixSixBot(Star):
                         # 如果是字符串，直接使用
                         template = response_data
                     
-                    # 如果模板中包含 {name} 占位符，替换为偶像名字
+                    # 如果模板中包含 {name} 占位符，替换为小偶像名字
                     # 如果没有占位符，直接使用模板
                     if "{name}" in template:
                         response_txt = template.replace("{name}", idol_name)
@@ -220,7 +220,7 @@ class SixSixBot(Star):
                         yield event.chain_result(chain)
                     return
             
-            # 额外检查：如果消息是"好想XXX"格式，且XXX是该偶像的名字或昵称（包括自定义昵称），也触发应援口号
+            # 额外检查：如果消息是"好想XXX"格式，且XXX是该小偶像的名字或昵称（包括自定义昵称），也触发应援口号
             if target_name_for_match and is_target_idol and catchphrases:
                 # 查找"好想XXX"相关的应援口号
                 matched_responses = []
@@ -242,7 +242,7 @@ class SixSixBot(Star):
                     else:
                         template = first_catchphrase
                 
-                # 如果模板中包含 {name} 占位符，替换为偶像名字
+                # 如果模板中包含 {name} 占位符，替换为小偶像名字
                 if "{name}" in template:
                     response_txt = template.replace("{name}", idol_name)
                 else:
@@ -307,7 +307,7 @@ class SixSixBot(Star):
         
         user_record = self.db.data.get("users", {}).get(user_id, {})
         if user_record.get("last_checkin") == today:
-            # 重复签到：显示今天已分配的xox和图片
+            # 重复签到：显示今天已分配的小偶像和图片
             today_idol = user_record.get("today_idol")
             if today_idol:
                 already_msg = self.config.get("default_messages", {}).get("already_checkin", "你今天已经签到过了哦~")
@@ -319,7 +319,7 @@ class SixSixBot(Star):
                 else:
                     yield event.chain_result(chain)
             else:
-                # 如果没有保存今天分配的xox（可能是旧数据），只显示文字
+                # 如果没有保存今天分配的小偶像（可能是旧数据），只显示文字
                 already_msg = self.config.get("default_messages", {}).get("already_checkin", "你今天已经签到过了哦~")
                 chain = self._build_reply_chain(event, user_id, already_msg)
                 if hasattr(event, 'reply'):
@@ -336,7 +336,7 @@ class SixSixBot(Star):
 
         img_path = self.db.get_random_image_path(lucky_idol)
         
-        # 保存签到记录，包括今天分配的xox
+        # 保存签到记录，包括今天分配的小偶像
         self.db.data.setdefault("users", {})[user_id] = {
             "last_checkin": today,
             "today_idol": lucky_idol
@@ -371,7 +371,7 @@ class SixSixBot(Star):
             yield event.plain_result(f"未找到关于 '{target}' 的信息。")
             return
             
-        # XOX档案格式化
+        # 小偶像档案格式化
         info = self.db.data.get("idols", {}).get(real_name, {})
         nicks = info.get("nicknames", [])
         idol_info = info.get("info", "这个人很神秘，目前还没有公开资料，等待管理员补充。")
@@ -415,7 +415,7 @@ class SixSixBot(Star):
             yield event.plain_result("姓名和昵称不能为空。")
             return
         
-        self.db.add_idol(real_name)  # 注册偶像并创建文件夹
+        self.db.add_idol(real_name)  # 注册小偶像并创建文件夹
         
         # add_idol 已经创建了记录，直接访问即可
         idols = self.db.data.get("idols", {})
@@ -472,19 +472,19 @@ class SixSixBot(Star):
                 # 输入就是真实姓名
                 real_name = idol_input
             else:
-                # 如果不存在，自动创建新偶像
+                # 如果不存在，自动创建新小偶像
                 real_name = idol_input
                 self.db.add_idol(real_name)
                 was_auto_created = True
                 # 重新获取数据（add_idol 会保存）
                 idols = self.db.data.get("idols", {})
 
-        # 确保偶像记录存在
+        # 确保小偶像记录存在
         if real_name not in idols:
             self.db.add_idol(real_name)
             idols = self.db.data.get("idols", {})
         
-        # 添加应援口号到对应偶像的 catchphrases 中
+        # 添加应援口号到对应小偶像的 catchphrases 中
         idols[real_name].setdefault("catchphrases", {})[trigger] = resp
         self.db.save("idols")
         
@@ -495,9 +495,9 @@ class SixSixBot(Star):
             resp_display = resp
         
         if was_auto_created:
-            yield event.plain_result(f"✅ 添加成功！\nℹ️ 已自动创建偶像：{real_name}\n触发：{trigger}\n回复：{resp_display}\n关联偶像：{real_name}")
+            yield event.plain_result(f"✅ 添加成功！\nℹ️ 已自动创建小偶像：{real_name}\n{trigger}\n{resp_display}\n关联：{real_name}")
         else:
-            yield event.plain_result(f"✅ 添加成功！\n触发：{trigger}\n回复：{resp_display}\n关联偶像：{real_name}")
+            yield event.plain_result(f"✅ 添加成功！\n{trigger}\n{resp_display}\n关联：{real_name}")
 
     # ================= 列表查询 =================
 
@@ -522,7 +522,7 @@ class SixSixBot(Star):
             
         real_name = self.db.get_real_name(target)
         if not real_name:
-             yield event.plain_result("未找到该偶像。")
+             yield event.plain_result("未找到该小偶像。")
              return
              
         nicks = self.db.data.get("idols", {}).get(real_name, {}).get("nicknames", [])
@@ -618,7 +618,7 @@ class SixSixBot(Star):
         
         idol_name = args[0].strip()
         if not idol_name:
-            yield event.plain_result("偶像名字不能为空。")
+            yield event.plain_result("小偶像名字不能为空。")
             return
         
         # 检查是否已存在
@@ -629,7 +629,7 @@ class SixSixBot(Star):
         
         # 添加小偶像
         self.db.add_idol(idol_name)
-        yield event.plain_result(f"✅ 已成功添加小偶像：{idol_name}\n图片目录已创建：{os.path.join(self.db.img_dir, idol_name)}\n请记得添加昵称和应援口号哦~")
+        yield event.plain_result(f"✅ 已成功添加小偶像：{idol_name}\n图片目录已创建！\n请记得添加昵称和应援口号哦~")
         
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("del_idol")
@@ -643,7 +643,7 @@ class SixSixBot(Star):
         
         idol_name = args[0].strip()
         if not idol_name:
-            yield event.plain_result("偶像名字不能为空。")
+            yield event.plain_result("小偶像名字不能为空。")
             return
         
         # 检查是否存在
@@ -726,7 +726,7 @@ class SixSixBot(Star):
             "4. 数据管理：\n"
             "/add <姓名> <昵称> - 添加昵称\n"
             "/add catchphrase -i <名> -t <触发> -r <响应> - 添加口号\n"
-            "/list <姓名> - 列出偶像昵称\n"
+            "/list <姓名> - 列出小偶像昵称\n"
             "/list catchphrase - 列出所有口号\n"
             "5. 管理员命令 (仅限授权用户)：\n"
             "/auth <QQ ID> - 添加授权用户\n"

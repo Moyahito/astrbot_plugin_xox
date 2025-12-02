@@ -2,7 +2,7 @@
 数据管理器模块
 
 负责：
-- 偶像信息、昵称、简介的存储
+- 小偶像信息、昵称、简介的存储
 - 应援口号的存储
 - 用户签到记录的存储
 - 管理员列表的存储
@@ -35,7 +35,7 @@ class DataManager:
 
         # 文件路径
         self.files = {
-            "idols": os.path.join(self.data_dir, "idols.json"),         # 偶像名单、昵称、简介、应援口号
+            "idols": os.path.join(self.data_dir, "idols.json"),         # 小偶像名单、昵称、简介、应援口号
             "users": os.path.join(self.data_dir, "users.json"),         # 签到记录
             "groups": os.path.join(self.data_dir, "groups.json"),       # 群组信息 (占位)
             "admins": os.path.join(self.data_dir, "admins.json")        # 授权管理员
