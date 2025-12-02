@@ -13,7 +13,7 @@ idol Bot 插件 - 偶像互动与签到系统
 """
 import os
 import datetime
-from astrbot.api.event.filter import, AstrMessageEvent
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
