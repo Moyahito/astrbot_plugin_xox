@@ -13,7 +13,7 @@ idol Bot 插件 - 偶像互动与签到系统
 """
 import os
 import datetime
-from astrbot.api.event import filter, EventMessageEvent
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
@@ -47,7 +47,7 @@ class SixSixBot(Star):
     # ================= 核心消息监听 (用于处理口号触发) =================
     
     @filter.event_message_type("GROUP_MESSAGE")
-    async def passive_catchphrase_handler(self, event: EventMessageEvent):
+    async def passive_catchphrase_handler(self, event: AstrMessageEvent):
         """检查非指令消息中是否包含应援口号触发句"""
         # 检查是否启用口号触发功能
         if not self.config.get("enable_catchphrase", True):
@@ -88,7 +88,7 @@ class SixSixBot(Star):
     # ================= 签到系统 =================
     
     @filter.command("qd")
-    async def cmd_checkin(self, event: EventMessageEvent):
+    async def cmd_checkin(self, event: AstrMessageEvent):
         """签到领取今天的宝宝"""
         user_id = str(event.get_sender_id())
         user_name = event.get_sender_name()
@@ -136,7 +136,7 @@ class SixSixBot(Star):
     # ================= 小偶像信息查询与管理 =================
     
     @filter.command("xox")
-    async def cmd_idol_info(self, event: EventMessageEvent):
+    async def cmd_idol_info(self, event: AstrMessageEvent):
         """/xox <姓名或昵称> - 查询小偶像信息"""
         args = event.message_str.split()[1:]
         if not args:
@@ -171,7 +171,7 @@ class SixSixBot(Star):
 
 
     @filter.command("add")
-    async def cmd_add(self, event: EventMessageEvent):
+    async def cmd_add(self, event: AstrMessageEvent):
         """/add <姓名> <昵称> 或 /add catchphrase -i -t -r"""
         msg_parts = event.message_str.split()
         if len(msg_parts) > 1 and msg_parts[1].lower() == "catchphrase":
@@ -185,7 +185,7 @@ class SixSixBot(Star):
             async for result in self._add_nickname_logic(event, args):
                 yield result
 
-    async def _add_nickname_logic(self, event: EventMessageEvent, args):
+    async def _add_nickname_logic(self, event: AstrMessageEvent, args):
         """/add <姓名> <昵称> 的内部实现"""
         if len(args) < 2:
             yield event.plain_result("格式：/add <姓名> <昵称>")
@@ -214,7 +214,7 @@ class SixSixBot(Star):
         else:
             yield event.plain_result(f"{nickname} 已经是 {real_name} 的昵称了。")
 
-    async def _add_catchphrase_logic(self, event: EventMessageEvent, args):
+    async def _add_catchphrase_logic(self, event: AstrMessageEvent, args):
         """/add catchphrase -i <name> -t <trigger> -r <response> 的内部实现"""
         
         params = {"-i": "", "-t": "", "-r": ""}
@@ -250,7 +250,7 @@ class SixSixBot(Star):
     # ================= 列表查询 =================
 
     @filter.command("list")
-    async def cmd_list(self, event: EventMessageEvent):
+    async def cmd_list(self, event: AstrMessageEvent):
         """/list <姓名> 或 /list catchphrase"""
         args = event.message_str.split()[1:]
 
@@ -276,7 +276,7 @@ class SixSixBot(Star):
         nicks = self.db.data.get("idols", {}).get(real_name, {}).get("nicknames", [])
         yield event.plain_result(f"{real_name} 的昵称：{', '.join(nicks)}")
         
-    async def _list_catchphrase_logic(self, event: EventMessageEvent):
+    async def _list_catchphrase_logic(self, event: AstrMessageEvent):
         """/list catchphrase 的内部实现"""
         cps = self.db.data.get("catchphrases", {})
         if not cps:
@@ -297,7 +297,7 @@ class SixSixBot(Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("auth")
-    async def cmd_auth(self, event: EventMessageEvent):
+    async def cmd_auth(self, event: AstrMessageEvent):
         """/auth <QQ ID> - 添加授权用户"""
         user_id = str(event.get_sender_id())
         args = event.message_str.split()[1:]
@@ -321,7 +321,7 @@ class SixSixBot(Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("rauth")
-    async def cmd_rauth(self, event: EventMessageEvent):
+    async def cmd_rauth(self, event: AstrMessageEvent):
         """/rauth <QQ ID> - 移除授权用户"""
         user_id = str(event.get_sender_id())
         args = event.message_str.split()[1:]
@@ -345,14 +345,14 @@ class SixSixBot(Star):
             
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("group")
-    async def cmd_group_manage(self, event: EventMessageEvent):
+    async def cmd_group_manage(self, event: AstrMessageEvent):
         """群组管理命令占位"""
         yield event.plain_result("群组管理功能已识别。请根据具体需求实现子命令逻辑（add/update/info/list）。")
 
     # ================= 基础帮助 =================
     
     @filter.command("help")
-    async def cmd_help(self, event: EventMessageEvent):
+    async def cmd_help(self, event: AstrMessageEvent):
         """显示此帮助信息"""
         help_text = (
             "🤖 idol Bot  命令列表：\n"
