@@ -64,10 +64,12 @@ class SixSixBot(Star):
         user_record = self.db.data.get("users", {}).get(user_id, {})
         today_idol = user_record.get("today_idol") if user_record.get("last_checkin") == today else None
 
-        # 处理"好想宝宝"的特殊情况
-        if "好想宝宝" in msg_str or "想宝宝" in msg_str:
+        # 处理"好想宝宝"的特殊情况（优先匹配，避免被"好想XXX"逻辑匹配）
+        # 支持多种表达：好想宝宝、想宝宝、好想 宝宝、想 宝宝 等
+        msg_normalized = msg_str.replace(" ", "").replace("，", "").replace(",", "")
+        if "好想宝宝" in msg_normalized or "想宝宝" in msg_normalized:
             if today_idol:
-                # 生成思念回复模板（3-5个随机选择）
+                # 生成思念回复模板（5个随机选择）
                 miss_templates = [
                     f"{today_idol}正在数着星星，每一颗都是对你的思念~！",
                     f"{today_idol}在月光下许愿，希望你能感受到她的想念~",
@@ -92,32 +94,46 @@ class SixSixBot(Star):
                 yield event.chain_result(chain)
                 return
             else:
-                # 用户今天还没签到
+                # 用户今天还没签到，提示先签到
+                chain = [
+                    Comp.At(qq=user_id),
+                    Comp.Plain(f"\n你还没有签到呢~先使用 /qd 签到领取今天的宝宝吧！")
+                ]
+                yield event.chain_result(chain)
                 return
 
-        # 处理"好想XXX"的情况（XXX不是今天的宝宝）
-        if msg_str.startswith("好想") or msg_str.startswith("想"):
+        # 处理"好想XXX"的情况（XXX不是今天的宝宝，且不是"宝宝"）
+        if (msg_str.startswith("好想") or msg_str.startswith("想")) and "宝宝" not in msg_str:
             # 提取想的人名
             target_name = msg_str.replace("好想", "").replace("想", "").strip()
-            if target_name and today_idol:
-                # 检查是否是今天签到的宝宝（支持真实姓名和昵称）
-                real_name = self.db.get_real_name(target_name)
-                if real_name != today_idol:
-                    # 不是今天的宝宝，提示用户关心今天的宝宝
-                    response_txt = f"这不是你的宝宝哦，这是别人的宝宝。请多多关心{today_idol}吧！"
-                    
-                    img_path = self.db.get_random_image_path(today_idol)
+            if target_name:
+                if today_idol:
+                    # 检查是否是今天签到的宝宝（支持真实姓名和昵称）
+                    real_name = self.db.get_real_name(target_name)
+                    if real_name and real_name != today_idol:
+                        # 不是今天的宝宝，提示用户关心今天的宝宝
+                        response_txt = f"这不是你的宝宝哦，这是别人的宝宝。请多多关心{today_idol}吧！"
+                        
+                        img_path = self.db.get_random_image_path(today_idol)
+                        chain = [
+                            Comp.At(qq=user_id),
+                            Comp.Plain(f"\n{response_txt}")
+                        ]
+                        
+                        if img_path and os.path.exists(img_path):
+                            chain.append(Comp.Image.fromFileSystem(img_path))
+                        else:
+                            no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
+                            chain.append(Comp.Plain(f"\n{no_image_msg}"))
+                        
+                        yield event.chain_result(chain)
+                        return
+                else:
+                    # 用户今天还没签到
                     chain = [
                         Comp.At(qq=user_id),
-                        Comp.Plain(f"\n{response_txt}")
+                        Comp.Plain(f"\n你还没有签到呢~先使用 /qd 签到领取今天的宝宝吧！")
                     ]
-                    
-                    if img_path and os.path.exists(img_path):
-                        chain.append(Comp.Image.fromFileSystem(img_path))
-                    else:
-                        no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
-                        chain.append(Comp.Plain(f"\n{no_image_msg}"))
-                    
                     yield event.chain_result(chain)
                     return
 
