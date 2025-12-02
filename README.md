@@ -1,4 +1,4 @@
-# 💖 idol Bot
+# 💖 SixSixBot
 
 A plugin for AstrBot plugin feature
 
@@ -6,7 +6,7 @@ A plugin for AstrBot plugin feature
 
 厌倦了冰冷的机器人？渴望在群聊中随时召唤你的宝宝？
 
-欢迎使用 **idol Bot**！这不是一个普通的 Bot，这是一个致力于让你每天都能拥有一个“宝宝”的神奇插件。从每日签到领取你的“专属宝宝”，到设置专属应援口号，让xox随时随地对你进行暖心回复！
+欢迎使用 **SixSixBot**！这不是一个普通的 Bot，这是一个致力于让你每天都能拥有一个"宝宝"的神奇插件。从每日签到领取你的"专属宝宝"，到设置专属应援口号，让xox随时随地对你进行暖心回复！
 
 ## 🚀 核心功能一览
 
