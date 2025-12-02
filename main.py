@@ -193,10 +193,25 @@ class SixSixBot(Star):
                 if real_name == idol_name:
                     is_target_idol = True
             
-            for trigger_txt, response_txt in catchphrases.items():
+            for trigger_txt, response_data in catchphrases.items():
                 # 检查触发句是否匹配消息
                 if trigger_txt in msg_str:
                     catchphrase_matched = True
+                    # 支持单个回复字符串或回复模板数组
+                    if isinstance(response_data, list):
+                        # 如果是数组，随机选择一个回复模板
+                        template = random.choice(response_data)
+                    else:
+                        # 如果是字符串，直接使用
+                        template = response_data
+                    
+                    # 如果模板中包含 {name} 占位符，替换为偶像名字
+                    # 如果没有占位符，直接使用模板
+                    if "{name}" in template:
+                        response_txt = template.replace("{name}", idol_name)
+                    else:
+                        response_txt = template
+                    
                     img_path = self.db.get_random_image_path(idol_name)
                     chain = self._build_reply_chain(event, user_id, response_txt, img_path)
                     if hasattr(event, 'reply'):
@@ -207,11 +222,35 @@ class SixSixBot(Star):
             
             # 额外检查：如果消息是"好想XXX"格式，且XXX是该偶像的名字或昵称（包括自定义昵称），也触发应援口号
             if target_name_for_match and is_target_idol and catchphrases:
-                # 使用第一个应援口号，或者可以随机选择一个
-                first_catchphrase = next(iter(catchphrases.values()))
+                # 查找"好想XXX"相关的应援口号
+                matched_responses = []
+                for trigger, response_data in catchphrases.items():
+                    if target_name_for_match in trigger or "好想" in trigger or "想" in trigger:
+                        if isinstance(response_data, list):
+                            matched_responses.extend(response_data)
+                        else:
+                            matched_responses.append(response_data)
+                
+                if matched_responses:
+                    # 随机选择一个回复模板
+                    template = random.choice(matched_responses)
+                else:
+                    # 如果没有找到匹配的，使用第一个应援口号
+                    first_catchphrase = next(iter(catchphrases.values()))
+                    if isinstance(first_catchphrase, list):
+                        template = random.choice(first_catchphrase)
+                    else:
+                        template = first_catchphrase
+                
+                # 如果模板中包含 {name} 占位符，替换为偶像名字
+                if "{name}" in template:
+                    response_txt = template.replace("{name}", idol_name)
+                else:
+                    response_txt = template
+                
                 catchphrase_matched = True
                 img_path = self.db.get_random_image_path(idol_name)
-                chain = self._build_reply_chain(event, user_id, first_catchphrase, img_path)
+                chain = self._build_reply_chain(event, user_id, response_txt, img_path)
                 if hasattr(event, 'reply'):
                     yield event.reply(chain)
                 else:
@@ -234,13 +273,19 @@ class SixSixBot(Star):
                                 is_taken = True
                                 break
                     
-                    # 如果没有被签到过，提供默认回复
+                    # 如果没有被签到过，提供默认回复（5个不同风格的模板）
                     if not is_taken:
                         miss_templates = [
-                            f"{real_name}也很想你~",
-                            f"{real_name}感受到了你的思念，也在想你哦~",
-                            f"{real_name}听到你的呼唤，心里暖暖的~",
-                            f"{real_name}也想和你见面呢~"
+                            f"{real_name}也很想你~今天也要加油哦！",
+                            f"{real_name}感受到了你的思念，我的心也暖暖的~",
+                            f"{real_name}听到你的呼唤，我也在想你呢！",
+                            f"{real_name}也想和你见面呢，期待我们的下一次相遇~",
+                            f"{real_name}收到你的思念了，每一秒都在想你哦~",
+                            f"猜猜是谁在天天看你的微博？是{real_name}啦！！",
+                            f"{real_name}正在数着星星，每一颗都是对你的思念~",
+                            f"{real_name}在月光下许愿，希望你能感受到她的想念~",
+                            f"{real_name}对着夜空轻声说：好想你呀，每一秒都在想你~",
+                            f"{real_name}把对你的思念写成了诗，每一句都是爱意~"
                         ]
                         response_txt = random.choice(miss_templates)
                         img_path = self.db.get_random_image_path(real_name)
@@ -467,7 +512,12 @@ class SixSixBot(Star):
         for idol_name, idol_data in idols.items():
             catchphrases = idol_data.get("catchphrases", {})
             for trigger, response in catchphrases.items():
-                all_catchphrases[trigger] = {"idol": idol_name, "resp": response}
+                # 处理数组格式的回复（显示第一个作为示例）
+                if isinstance(response, list):
+                    display_resp = response[0] if response else "（多个回复模板）"
+                else:
+                    display_resp = response
+                all_catchphrases[trigger] = {"idol": idol_name, "resp": display_resp}
         
         if not all_catchphrases:
             yield event.plain_result("暂时没有应援口号。")
