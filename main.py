@@ -47,7 +47,7 @@ class SixSixBot(Star):
     
     def _build_reply_chain(self, event: AstrMessageEvent, user_id: str, text: str, img_path: str = None):
         """
-        构建回复消息链：引用原消息 + @用户 + 换行 + 文字 + 图片
+        构建回复消息链：@用户 + 换行 + 文字 + 图片
         
         Args:
             event: 消息事件对象
@@ -60,30 +60,18 @@ class SixSixBot(Star):
         """
         chain = []
         
-        # 尝试添加引用（Reply组件）
-        try:
-            if hasattr(event, 'message_obj') and hasattr(event.message_obj, 'message_id'):
-                # 尝试导入Reply组件
-                try:
-                    Reply = getattr(Comp, 'Reply', None)
-                    if Reply:
-                        chain.append(Reply(message_id=event.message_obj.message_id))
-                except:
-                    pass
-        except:
-            pass
-        
         # @用户
         chain.append(Comp.At(qq=user_id))
-        # 换行 + 文字
-        chain.append(Comp.Plain(f"\n{text}"))
+        # 换行 + 文字（使用零宽空格避免被strip）
+        chain.append(Comp.Plain(f"\u200b\n{text}\u200b"))
         
         # 添加图片或提示
         if img_path and os.path.exists(img_path):
             chain.append(Comp.Image.fromFileSystem(img_path))
         else:
             no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
-            chain.append(Comp.Plain(f"\n{no_image_msg}"))
+            if no_image_msg:
+                chain.append(Comp.Plain(f"\n{no_image_msg}"))
         
         return chain
 
@@ -122,12 +110,19 @@ class SixSixBot(Star):
                 response_txt = random.choice(miss_templates)
                 img_path = self.db.get_random_image_path(today_idol)
                 chain = self._build_reply_chain(event, user_id, response_txt, img_path)
-                yield event.chain_result(chain)
+                # 尝试使用reply方法引用原消息，如果没有则使用chain_result
+                if hasattr(event, 'reply'):
+                    yield event.reply(chain)
+                else:
+                    yield event.chain_result(chain)
                 return
             else:
                 # 用户今天还没签到，提示先签到
                 chain = self._build_reply_chain(event, user_id, "你还没有签到呢~先使用 /qd 签到领取今天的宝宝吧！")
-                yield event.chain_result(chain)
+                if hasattr(event, 'reply'):
+                    yield event.reply(chain)
+                else:
+                    yield event.chain_result(chain)
                 return
 
         # 处理"好想XXX"的情况（XXX不是"宝宝"）
@@ -159,12 +154,18 @@ class SixSixBot(Star):
                             response_txt = f"这不是你的宝宝哦，这是别人的宝宝。请多多关心{today_idol}吧！"
                             img_path = self.db.get_random_image_path(today_idol)
                             chain = self._build_reply_chain(event, user_id, response_txt, img_path)
-                            yield event.chain_result(chain)
+                            if hasattr(event, 'reply'):
+                                yield event.reply(chain)
+                            else:
+                                yield event.chain_result(chain)
                             return
                         else:
                             # 用户今天还没签到，提示先签到
                             chain = self._build_reply_chain(event, user_id, "这不是你的宝宝哦，这是别人的宝宝。先使用 /qd 签到领取今天的宝宝吧！")
-                            yield event.chain_result(chain)
+                            if hasattr(event, 'reply'):
+                                yield event.reply(chain)
+                            else:
+                                yield event.chain_result(chain)
                             return
                     # 如果XXX没有被任何人签到过，继续正常的应援口号处理流程（不return，让代码继续执行）
                 # 如果找不到这个XXX，也继续正常的应援口号处理流程
@@ -179,7 +180,10 @@ class SixSixBot(Star):
                     catchphrase_matched = True
                     img_path = self.db.get_random_image_path(idol_name)
                     chain = self._build_reply_chain(event, user_id, response_txt, img_path)
-                    yield event.chain_result(chain)
+                    if hasattr(event, 'reply'):
+                        yield event.reply(chain)
+                    else:
+                        yield event.chain_result(chain)
                     return
         
         # 如果"好想XXX"但没有匹配到应援口号，且XXX没有被签到过，提供默认回复
@@ -209,7 +213,10 @@ class SixSixBot(Star):
                         response_txt = random.choice(miss_templates)
                         img_path = self.db.get_random_image_path(real_name)
                         chain = self._build_reply_chain(event, user_id, response_txt, img_path)
-                        yield event.chain_result(chain)
+                        if hasattr(event, 'reply'):
+                            yield event.reply(chain)
+                        else:
+                            yield event.chain_result(chain)
                         return 
 
     # ================= 签到系统 =================
@@ -230,12 +237,18 @@ class SixSixBot(Star):
                 response_txt = f"{already_msg}\n你的宝宝是：{today_idol}"
                 img_path = self.db.get_random_image_path(today_idol)
                 chain = self._build_reply_chain(event, user_id, response_txt, img_path)
-                yield event.chain_result(chain)
+                if hasattr(event, 'reply'):
+                    yield event.reply(chain)
+                else:
+                    yield event.chain_result(chain)
             else:
                 # 如果没有保存今天分配的xox（可能是旧数据），只显示文字
                 already_msg = self.config.get("default_messages", {}).get("already_checkin", "你今天已经签到过了哦~")
                 chain = self._build_reply_chain(event, user_id, already_msg)
-                yield event.chain_result(chain)
+                if hasattr(event, 'reply'):
+                    yield event.reply(chain)
+                else:
+                    yield event.chain_result(chain)
             return
 
         lucky_idol = self.db.get_random_idol()
@@ -255,7 +268,10 @@ class SixSixBot(Star):
 
         response_txt = f"签到成功！\n今天你的宝宝是：{lucky_idol}"
         chain = self._build_reply_chain(event, user_id, response_txt, img_path)
-        yield event.chain_result(chain)
+        if hasattr(event, 'reply'):
+            yield event.reply(chain)
+        else:
+            yield event.chain_result(chain)
 
     # ================= 小偶像信息查询与管理 =================
     
