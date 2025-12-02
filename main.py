@@ -447,34 +447,57 @@ class SixSixBot(Star):
             elif current_flag is not None:
                 params[current_flag] += word + " "
         
-        idol_input = params["-i"].strip()
-        trigger = params["-t"].strip()
-        resp = params["-r"].strip()
+        # 去除参数值中的尖括号和空格
+        def clean_param(value):
+            return value.strip().strip("<>").strip()
+        
+        idol_input = clean_param(params["-i"])
+        trigger = clean_param(params["-t"])
+        resp = clean_param(params["-r"])
 
         if not idol_input or not trigger or not resp:
             yield event.plain_result("格式错误，请使用：/add catchphrase -i <姓名> -t <触发句> -r <响应句>")
             return
 
+        # 先检查输入是否直接是真实姓名
+        idols = self.db.data.get("idols", {})
+        was_auto_created = False
+        
+        # 先尝试查找真实姓名（支持昵称查找）
         real_name = self.db.get_real_name(idol_input)
+        
+        # 如果找不到，检查输入是否直接是真实姓名
         if not real_name:
-            yield event.plain_result(f"找不到偶像 {idol_input}，请先使用 /add 注册。")
-            return
+            if idol_input in idols:
+                # 输入就是真实姓名
+                real_name = idol_input
+            else:
+                # 如果不存在，自动创建新偶像
+                real_name = idol_input
+                self.db.add_idol(real_name)
+                was_auto_created = True
+                # 重新获取数据（add_idol 会保存）
+                idols = self.db.data.get("idols", {})
 
         # 确保偶像记录存在
-        self.db.add_idol(real_name)
-        idols = self.db.data.get("idols", {})
         if real_name not in idols:
-            idols[real_name] = {
-                "nicknames": [],
-                "info": "这个人很神秘，目前还没有公开资料，等待管理员补充。",
-                "catchphrases": {}
-            }
+            self.db.add_idol(real_name)
+            idols = self.db.data.get("idols", {})
         
         # 添加应援口号到对应偶像的 catchphrases 中
         idols[real_name].setdefault("catchphrases", {})[trigger] = resp
         self.db.save("idols")
         
-        yield event.plain_result(f"添加成功！\n触发：{trigger}\n回复：{resp}\n关联偶像：{real_name}")
+        # 格式化回复内容显示
+        if isinstance(resp, list):
+            resp_display = f"（{len(resp)}个回复模板）"
+        else:
+            resp_display = resp
+        
+        if was_auto_created:
+            yield event.plain_result(f"✅ 添加成功！\nℹ️ 已自动创建偶像：{real_name}\n触发：{trigger}\n回复：{resp_display}\n关联偶像：{real_name}")
+        else:
+            yield event.plain_result(f"✅ 添加成功！\n触发：{trigger}\n回复：{resp_display}\n关联偶像：{real_name}")
 
     # ================= 列表查询 =================
 
@@ -584,6 +607,66 @@ class SixSixBot(Star):
             yield event.plain_result(f"用户 {target_id} 不是管理员。")
             
     @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("add_idol")
+    async def cmd_add_idol(self, event: AstrMessageEvent):
+        """/add_idol <名字> - 添加新的小偶像（仅管理员）"""
+        args = event.message_str.split()[1:]
+        
+        if not args:
+            yield event.plain_result("格式：/add_idol <名字>\n例如：/add_idol 冷群王")
+            return
+        
+        idol_name = args[0].strip()
+        if not idol_name:
+            yield event.plain_result("偶像名字不能为空。")
+            return
+        
+        # 检查是否已存在
+        idols = self.db.data.get("idols", {})
+        if idol_name in idols:
+            yield event.plain_result(f"小偶像 {idol_name} 已经存在了。")
+            return
+        
+        # 添加小偶像
+        self.db.add_idol(idol_name)
+        yield event.plain_result(f"✅ 已成功添加小偶像：{idol_name}\n图片目录已创建：{os.path.join(self.db.img_dir, idol_name)}\n请记得添加昵称和应援口号哦~")
+        
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("del_idol")
+    async def cmd_del_idol(self, event: AstrMessageEvent):
+        """/del_idol <名字> - 删除小偶像（仅管理员）"""
+        args = event.message_str.split()[1:]
+        
+        if not args:
+            yield event.plain_result("格式：/del_idol <名字>\n例如：/del_idol 冷群王\n⚠️ 警告：删除操作不可恢复！")
+            return
+        
+        idol_name = args[0].strip()
+        if not idol_name:
+            yield event.plain_result("偶像名字不能为空。")
+            return
+        
+        # 检查是否存在
+        idols = self.db.data.get("idols", {})
+        real_name = self.db.get_real_name(idol_name)  # 支持通过昵称查找
+        
+        if not real_name or real_name not in idols:
+            yield event.plain_result(f"未找到小偶像：{idol_name}")
+            return
+        
+        # 删除小偶像
+        del idols[real_name]
+        self.db.save("idols")
+        
+        # 提示图片目录（不自动删除，让用户手动处理）
+        img_dir = os.path.join(self.db.img_dir, real_name)
+        msg = f"✅ 已成功删除小偶像：{real_name}\n"
+        if os.path.exists(img_dir):
+            msg += f"⚠️ 图片目录仍存在：{img_dir}\n如需删除图片，请手动删除该目录。"
+        
+        yield event.plain_result(msg)
+            
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("reset_today")
     async def cmd_reset_today(self, event: AstrMessageEvent):
         """/reset_today - 重置今天所有用户的签到记录（仅管理员）"""
@@ -648,6 +731,8 @@ class SixSixBot(Star):
             "5. 管理员命令 (仅限授权用户)：\n"
             "/auth <QQ ID> - 添加授权用户\n"
             "/rauth <QQ ID> - 移除授权用户\n"
+            "/add_idol <名字> - 添加新的小偶像\n"
+            "/del_idol <名字> - 删除小偶像（支持名字或昵称）\n"
             "/reset_today - 重置今天所有用户的签到记录\n"
             "/group <sub_cmd> - 群组管理\n"
         )
