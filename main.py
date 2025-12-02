@@ -13,6 +13,7 @@ SixSixBot 插件 - 偶像互动与签到系统
 """
 import os
 import datetime
+import random
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 import astrbot.api.message_components as Comp
@@ -58,14 +59,74 @@ class SixSixBot(Star):
         if msg_str.startswith("/"):
             return
 
+        user_id = str(event.get_sender_id())
+        today = datetime.date.today().isoformat()
+        user_record = self.db.data.get("users", {}).get(user_id, {})
+        today_idol = user_record.get("today_idol") if user_record.get("last_checkin") == today else None
+
+        # 处理"好想宝宝"的特殊情况
+        if "好想宝宝" in msg_str or "想宝宝" in msg_str:
+            if today_idol:
+                # 生成思念回复模板（3-5个随机选择）
+                miss_templates = [
+                    f"{today_idol}正在数着星星，每一颗都是对你的思念~！",
+                    f"{today_idol}在月光下许愿，希望你能感受到她的想念~",
+                    f"{today_idol}对着夜空轻声说：好想你呀，每一秒都在想你~",
+                    f"{today_idol}在梦里遇见了你，醒来后更加思念~",
+                    f"{today_idol}把对你的思念写成了诗，每一句都是爱意~"
+                ]
+                response_txt = random.choice(miss_templates)
+                
+                img_path = self.db.get_random_image_path(today_idol)
+                chain = [
+                    Comp.At(qq=user_id),
+                    Comp.Plain(f"\n{response_txt}")
+                ]
+                
+                if img_path and os.path.exists(img_path):
+                    chain.append(Comp.Image.fromFileSystem(img_path))
+                else:
+                    no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
+                    chain.append(Comp.Plain(f"\n{no_image_msg}"))
+                
+                yield event.chain_result(chain)
+                return
+            else:
+                # 用户今天还没签到
+                return
+
+        # 处理"好想XXX"的情况（XXX不是今天的宝宝）
+        if msg_str.startswith("好想") or msg_str.startswith("想"):
+            # 提取想的人名
+            target_name = msg_str.replace("好想", "").replace("想", "").strip()
+            if target_name and today_idol:
+                # 检查是否是今天签到的宝宝（支持真实姓名和昵称）
+                real_name = self.db.get_real_name(target_name)
+                if real_name != today_idol:
+                    # 不是今天的宝宝，提示用户关心今天的宝宝
+                    response_txt = f"这不是你的宝宝哦，这是别人的宝宝。请多多关心{today_idol}吧！"
+                    
+                    img_path = self.db.get_random_image_path(today_idol)
+                    chain = [
+                        Comp.At(qq=user_id),
+                        Comp.Plain(f"\n{response_txt}")
+                    ]
+                    
+                    if img_path and os.path.exists(img_path):
+                        chain.append(Comp.Image.fromFileSystem(img_path))
+                    else:
+                        no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
+                        chain.append(Comp.Plain(f"\n{no_image_msg}"))
+                    
+                    yield event.chain_result(chain)
+                    return
+
         # 遍历所有偶像的应援口号
         idols = self.db.data.get("idols", {})
         for idol_name, idol_data in idols.items():
             catchphrases = idol_data.get("catchphrases", {})
             for trigger_txt, response_txt in catchphrases.items():
                 if trigger_txt in msg_str:
-                    user_id = event.get_sender_id()
-                    
                     img_path = self.db.get_random_image_path(idol_name)
                     
                     chain = [
@@ -93,12 +154,32 @@ class SixSixBot(Star):
         
         user_record = self.db.data.get("users", {}).get(user_id, {})
         if user_record.get("last_checkin") == today:
-            already_msg = self.config.get("default_messages", {}).get("already_checkin", "你今天已经签到过了哦~")
-            chain = [
-                Comp.At(qq=user_id),
-                Comp.Plain(f"\n{already_msg}")
-            ]
-            yield event.chain_result(chain)
+            # 重复签到：显示今天已分配的xox和图片
+            today_idol = user_record.get("today_idol")
+            if today_idol:
+                already_msg = self.config.get("default_messages", {}).get("already_checkin", "你今天已经签到过了哦~")
+                chain = [
+                    Comp.At(qq=user_id),
+                    Comp.Plain(f"\n{already_msg}\n你的宝宝是：{today_idol}")
+                ]
+                
+                # 获取今天分配的xox的图片
+                img_path = self.db.get_random_image_path(today_idol)
+                if img_path and os.path.exists(img_path):
+                    chain.append(Comp.Image.fromFileSystem(img_path))
+                else:
+                    no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
+                    chain.append(Comp.Plain(f"\n{no_image_msg}"))
+                
+                yield event.chain_result(chain)
+            else:
+                # 如果没有保存今天分配的xox（可能是旧数据），只显示文字
+                already_msg = self.config.get("default_messages", {}).get("already_checkin", "你今天已经签到过了哦~")
+                chain = [
+                    Comp.At(qq=user_id),
+                    Comp.Plain(f"\n{already_msg}")
+                ]
+                yield event.chain_result(chain)
             return
 
         lucky_idol = self.db.get_random_idol()
@@ -109,7 +190,11 @@ class SixSixBot(Star):
 
         img_path = self.db.get_random_image_path(lucky_idol)
         
-        self.db.data.setdefault("users", {})[user_id] = {"last_checkin": today}
+        # 保存签到记录，包括今天分配的xox
+        self.db.data.setdefault("users", {})[user_id] = {
+            "last_checkin": today,
+            "today_idol": lucky_idol
+        }
         self.db.save("users")
 
         text_lines = [
@@ -374,14 +459,19 @@ class SixSixBot(Star):
             "----------------------------\n"
             "1. 互动与查询：\n"
             "/qd - 每日签到，领取今日宝宝\n"
+            "   重复签到会显示今天已分配的宝宝和图片\n"
             "/xox <名字/昵称> - 查询小偶像档案\n"
-            "   (触发口号可回复对应图片)\n"
-            "2. 数据管理：\n"
+            "2. 专属互动（无需命令）：\n"
+            "好想宝宝 - 对今天签到的宝宝说思念，会收到随机回复和图片\n"
+            "好想XXX - 如果想其他人，会提示关心今天的宝宝\n"
+            "3. 应援口号：\n"
+            "在群聊中说出设置的口号，会触发对应回复和图片\n"
+            "4. 数据管理：\n"
             "/add <姓名> <昵称> - 添加昵称\n"
             "/add catchphrase -i <名> -t <触发> -r <响应> - 添加口号\n"
             "/list <姓名> - 列出偶像昵称\n"
             "/list catchphrase - 列出所有口号\n"
-            "3. 管理员命令 (仅限授权用户)：\n"
+            "5. 管理员命令 (仅限授权用户)：\n"
             "/auth <QQ ID> - 添加授权用户\n"
             "/rauth <QQ ID> - 移除授权用户\n"
             "/group <sub_cmd> - 群组管理\n"
