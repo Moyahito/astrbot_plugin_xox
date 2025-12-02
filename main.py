@@ -19,7 +19,7 @@ import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from .data_manager import DataManager
 
-@register("idol Bot", "Moyahito", "idol bot偶像互动插件精简版", "1.0.0", "https://github.com/Moyahito/astrbot_plugin_xox")
+@register("astrbot_plugin_xox", "Moyahito", "idol bot偶像互动插件精简版", "1.0.0", "https://github.com/Moyahito/astrbot_plugin_xox")
 class SixSixBot(Star):
     """idol Bot 插件主类"""
     
