@@ -102,47 +102,67 @@ class SixSixBot(Star):
                 yield event.chain_result(chain)
                 return
 
-        # 处理"好想XXX"的情况（XXX不是今天的宝宝，且不是"宝宝"）
+        # 处理"好想XXX"的情况（XXX不是"宝宝"）
         if (msg_str.startswith("好想") or msg_str.startswith("想")) and "宝宝" not in msg_str:
             # 提取想的人名
             target_name = msg_str.replace("好想", "").replace("想", "").strip()
             if target_name:
-                if today_idol:
-                    # 检查是否是今天签到的宝宝（支持真实姓名和昵称）
-                    real_name = self.db.get_real_name(target_name)
-                    if real_name and real_name != today_idol:
-                        # 不是今天的宝宝，提示用户关心今天的宝宝
-                        response_txt = f"这不是你的宝宝哦，这是别人的宝宝。请多多关心{today_idol}吧！"
-                        
-                        img_path = self.db.get_random_image_path(today_idol)
-                        chain = [
-                            Comp.At(qq=user_id),
-                            Comp.Plain(f"\n{response_txt}")
-                        ]
-                        
-                        if img_path and os.path.exists(img_path):
-                            chain.append(Comp.Image.fromFileSystem(img_path))
+                # 检查目标名字是否存在于系统中（支持真实姓名和昵称）
+                real_name = self.db.get_real_name(target_name)
+                
+                if real_name:
+                    # 检查这个XXX是否今天已经被其他用户签到过
+                    users_data = self.db.data.get("users", {})
+                    today = datetime.date.today().isoformat()
+                    is_taken_by_others = False
+                    
+                    # 遍历所有用户，检查是否有其他用户今天签到了这个XXX
+                    for uid, user_record in users_data.items():
+                        if uid != user_id:  # 排除当前用户
+                            if user_record.get("last_checkin") == today:
+                                if user_record.get("today_idol") == real_name:
+                                    is_taken_by_others = True
+                                    break
+                    
+                    # 如果XXX已经被其他用户签到过
+                    if is_taken_by_others:
+                        if today_idol:
+                            # 用户今天已签到，提示关心自己的宝宝
+                            response_txt = f"这不是你的宝宝哦，这是别人的宝宝。请多多关心{today_idol}吧！"
+                            
+                            img_path = self.db.get_random_image_path(today_idol)
+                            chain = [
+                                Comp.At(qq=user_id),
+                                Comp.Plain(f"\n{response_txt}")
+                            ]
+                            
+                            if img_path and os.path.exists(img_path):
+                                chain.append(Comp.Image.fromFileSystem(img_path))
+                            else:
+                                no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
+                                chain.append(Comp.Plain(f"\n{no_image_msg}"))
+                            
+                            yield event.chain_result(chain)
+                            return
                         else:
-                            no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
-                            chain.append(Comp.Plain(f"\n{no_image_msg}"))
-                        
-                        yield event.chain_result(chain)
-                        return
-                else:
-                    # 用户今天还没签到
-                    chain = [
-                        Comp.At(qq=user_id),
-                        Comp.Plain(f"\n你还没有签到呢~先使用 /qd 签到领取今天的宝宝吧！")
-                    ]
-                    yield event.chain_result(chain)
-                    return
+                            # 用户今天还没签到，提示先签到
+                            chain = [
+                                Comp.At(qq=user_id),
+                                Comp.Plain(f"\n这不是你的宝宝哦，这是别人的宝宝。先使用 /qd 签到领取今天的宝宝吧！")
+                            ]
+                            yield event.chain_result(chain)
+                            return
+                    # 如果XXX没有被任何人签到过，继续正常的应援口号处理流程（不return，让代码继续执行）
+                # 如果找不到这个XXX，也继续正常的应援口号处理流程
 
         # 遍历所有偶像的应援口号
         idols = self.db.data.get("idols", {})
+        catchphrase_matched = False
         for idol_name, idol_data in idols.items():
             catchphrases = idol_data.get("catchphrases", {})
             for trigger_txt, response_txt in catchphrases.items():
                 if trigger_txt in msg_str:
+                    catchphrase_matched = True
                     img_path = self.db.get_random_image_path(idol_name)
                     
                     chain = [
@@ -157,7 +177,48 @@ class SixSixBot(Star):
                         chain.append(Comp.Plain(f"\n{no_image_msg}"))
 
                     yield event.chain_result(chain)
-                    return 
+                    return
+        
+        # 如果"好想XXX"但没有匹配到应援口号，且XXX没有被签到过，提供默认回复
+        if (msg_str.startswith("好想") or msg_str.startswith("想")) and "宝宝" not in msg_str and not catchphrase_matched:
+            target_name = msg_str.replace("好想", "").replace("想", "").strip()
+            if target_name:
+                real_name = self.db.get_real_name(target_name)
+                if real_name:
+                    # 检查是否被签到过
+                    users_data = self.db.data.get("users", {})
+                    today = datetime.date.today().isoformat()
+                    is_taken = False
+                    for uid, user_record in users_data.items():
+                        if user_record.get("last_checkin") == today:
+                            if user_record.get("today_idol") == real_name:
+                                is_taken = True
+                                break
+                    
+                    # 如果没有被签到过，提供默认回复
+                    if not is_taken:
+                        miss_templates = [
+                            f"{real_name}也很想你~",
+                            f"{real_name}感受到了你的思念，也在想你哦~",
+                            f"{real_name}听到你的呼唤，心里暖暖的~",
+                            f"{real_name}也想和你见面呢~"
+                        ]
+                        response_txt = random.choice(miss_templates)
+                        
+                        img_path = self.db.get_random_image_path(real_name)
+                        chain = [
+                            Comp.At(qq=user_id),
+                            Comp.Plain(f"\n{response_txt}")
+                        ]
+                        
+                        if img_path and os.path.exists(img_path):
+                            chain.append(Comp.Image.fromFileSystem(img_path))
+                        else:
+                            no_image_msg = self.config.get("default_messages", {}).get("no_image", "暂时还没有解锁这位小偶像哦。")
+                            chain.append(Comp.Plain(f"\n{no_image_msg}"))
+                        
+                        yield event.chain_result(chain)
+                        return 
 
     # ================= 签到系统 =================
     
@@ -460,6 +521,34 @@ class SixSixBot(Star):
             yield event.plain_result(f"用户 {target_id} 不是管理员。")
             
     @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("reset_today")
+    async def cmd_reset_today(self, event: AstrMessageEvent):
+        """/reset_today - 重置今天所有用户的签到记录（仅管理员）"""
+        today = datetime.date.today().isoformat()
+        users_data = self.db.data.get("users", {})
+        
+        # 统计今天签到的用户数量
+        reset_count = 0
+        for user_id, user_record in users_data.items():
+            if user_record.get("last_checkin") == today:
+                reset_count += 1
+                # 清除今天的签到记录
+                if "last_checkin" in user_record and user_record["last_checkin"] == today:
+                    user_record.pop("last_checkin", None)
+                    user_record.pop("today_idol", None)
+                    # 如果用户记录为空，可以删除整个记录
+                    if not user_record:
+                        users_data.pop(user_id, None)
+        
+        # 保存数据
+        self.db.save("users")
+        
+        if reset_count > 0:
+            yield event.plain_result(f"✅ 已重置今天所有签到记录！\n共清除了 {reset_count} 位用户的签到记录。")
+        else:
+            yield event.plain_result("ℹ️ 今天还没有用户签到，无需重置。")
+            
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("group")
     async def cmd_group_manage(self, event: AstrMessageEvent):
         """群组管理命令占位"""
@@ -490,6 +579,7 @@ class SixSixBot(Star):
             "5. 管理员命令 (仅限授权用户)：\n"
             "/auth <QQ ID> - 添加授权用户\n"
             "/rauth <QQ ID> - 移除授权用户\n"
+            "/reset_today - 重置今天所有用户的签到记录\n"
             "/group <sub_cmd> - 群组管理\n"
         )
         yield event.plain_result(help_text)
