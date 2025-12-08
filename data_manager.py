@@ -132,10 +132,9 @@ class DataManager:
 
     def get_random_image_path(self, idol_name):
         """
-        从图片目录中随机获取一张图片路径。
-        优先使用爬虫目录：从配置的 image_base_dir 回退到 apps 目录，找到 weibo-crawler-master/weibo，
+        强制从爬虫目录获取图片路径。
+        从配置的 image_base_dir 回退到 apps 目录，找到 weibo-crawler-master/weibo，
         遍历该目录下的所有文件夹，匹配包含小偶像名字的目录。
-        如果找不到，回退到默认 plugin_data 目录。
         """
         idols = self.data.get("idols", {})
         # 获取昵称列表（如果偶像在系统中）
@@ -149,10 +148,10 @@ class DataManager:
             if stripped and stripped not in match_keywords:
                 match_keywords.append(stripped)
         
-        # 方法1：优先尝试爬虫目录（智能匹配）
+        # 强制从爬虫目录取图
         if self.img_dirs and len(self.img_dirs) > 0:
             crawler_root = self.img_dirs[0]  # 第一个是配置的爬虫目录
-            logging.info(f"🔍 尝试爬虫目录，起始路径: {crawler_root}, 偶像: {idol_name}, 关键词: {match_keywords}")
+            logging.info(f"🔍 强制从爬虫目录取图，起始路径: {crawler_root}, 偶像: {idol_name}, 关键词: {match_keywords}")
             if crawler_root and os.path.exists(crawler_root):
                 # 尝试回退到 apps 目录，找到 weibo-crawler-master/weibo
                 crawler_path = self._find_crawler_weibo_dir(crawler_root)
@@ -182,38 +181,10 @@ class DataManager:
                     logging.warning(f"⚠️ 未找到爬虫 weibo 目录，起始路径: {crawler_root}")
             else:
                 logging.warning(f"⚠️ 爬虫根目录不存在: {crawler_root}")
+        else:
+            logging.warning(f"⚠️ 未配置爬虫目录，img_dirs: {self.img_dirs}")
         
-        # 方法2：回退到默认目录（使用原来的逻辑）
-        logging.info(f"🔍 回退到默认目录查找，根目录列表: {self.img_dirs}")
-        # 定义多种路径格式（按优先级排序）
-        path_patterns = [
-            ("img", "原创微博图片"),  # 爬虫格式
-        ]
-        
-        # 遍历所有图片根目录（包括备用目录）
-        for root_dir in self.img_dirs:
-            logging.info(f"🔍 检查根目录: {root_dir}")
-            for keyword in match_keywords:
-                for pattern in path_patterns:
-                    if len(pattern) == 2:
-                        folder_path = os.path.join(root_dir, keyword, pattern[0], pattern[1])
-                    elif len(pattern) == 1:
-                        folder_path = os.path.join(root_dir, keyword, pattern[0]) if pattern[0] else os.path.join(root_dir, keyword)
-                    else:
-                        continue
-                    
-                    logging.info(f"🔍 尝试路径: {folder_path}, 存在: {os.path.exists(folder_path)}, 是目录: {os.path.isdir(folder_path) if os.path.exists(folder_path) else False}")
-                    if not os.path.exists(folder_path) or not os.path.isdir(folder_path):
-                        continue
-                    
-                    image_path = self._get_random_image_from_dir(folder_path)
-                    if image_path:
-                        logging.info(f"✅ 从默认目录找到图片: {image_path}")
-                        return image_path
-                    else:
-                        logging.warning(f"⚠️ 路径存在但无图片文件: {folder_path}")
-        
-        logging.warning(f"❌ 未找到 {idol_name} 的图片，匹配关键词: {match_keywords}, 根目录: {self.img_dirs}")
+        logging.warning(f"❌ 未找到 {idol_name} 的图片，匹配关键词: {match_keywords}")
         return None
     
     def _find_crawler_weibo_dir(self, start_path):
