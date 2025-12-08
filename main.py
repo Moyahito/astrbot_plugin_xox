@@ -32,18 +32,12 @@ class SixSixBot(Star):
         """
         super().__init__(context, config=config, **kwargs)
         self.plugin_dir = os.path.dirname(__file__)
-        # 计算图片目录：优先用配置 image_base_dir（爬虫目录），找不到再退回默认 plugin_data
+        # 计算图片目录：使用默认 plugin_data 目录
         plugin_name = os.path.basename(self.plugin_dir)
         data_dir = os.path.dirname(os.path.dirname(self.plugin_dir))  # 向上两级到 data 目录
-        default_img_dir = os.path.join(data_dir, "plugin_data", plugin_name)
-        custom_image_base = (config or {}).get("image_base_dir")
-        self.plugin_data_dir = custom_image_base if custom_image_base else default_img_dir
-        # 将默认路径写入配置，便于 DataManager 作为兜底使用
-        if config is None:
-            self.config = {}
-        else:
-            self.config = dict(config)
-        self.config.setdefault("fallback_img_dir", default_img_dir)
+        self.plugin_data_dir = os.path.join(data_dir, "plugin_data", plugin_name)
+        # 读取配置
+        self.config = config or {}
         # 初始化数据管理器（数据存储在 data 目录下，防止更新插件时丢失）
         self.db = DataManager(self.plugin_dir, self.plugin_data_dir, self.config)
 
