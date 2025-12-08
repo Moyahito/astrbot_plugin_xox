@@ -36,6 +36,12 @@
         "hint": "没有添加任何偶像时签到失败的提示"
       }
     }
+  },
+  "image_base_dir": {
+    "description": "图片根目录（可直接指向爬虫图片路径）",
+    "type": "string",
+    "default": "",
+    "hint": "留空则使用 data/plugin_data/astrbot_plugin_xox；填写后需在此目录下按真名建立子目录存放图片"
   }
 }
 

@@ -18,18 +18,29 @@ import logging
 class DataManager:
     """数据管理器，负责所有持久化数据的读写"""
     def __init__(self, plugin_dir, plugin_data_dir=None, config=None):
-        # 设置数据和图片目录
+        # 设置数据目录
         self.data_dir = os.path.join(plugin_dir, "data")
-        # 如果指定了 plugin_data_dir，使用它作为图片目录；否则使用插件目录下的 img
-        if plugin_data_dir:
-            self.img_dir = plugin_data_dir
-        else:
-            self.img_dir = os.path.join(plugin_dir, "img")
         os.makedirs(self.data_dir, exist_ok=True)
-        os.makedirs(self.img_dir, exist_ok=True)
-        
-        # 读取配置
+
+        # 图片目录：primary 优先（可配置为爬虫目录），fallback 其次（默认 plugin_data）
         self.config = config or {}
+        fallback_img_dir = self.config.get("fallback_img_dir")
+        self.img_dirs = []
+        if plugin_data_dir:
+            self.img_dirs.append(plugin_data_dir)
+        else:
+            self.img_dirs.append(os.path.join(plugin_dir, "img"))
+        if fallback_img_dir and fallback_img_dir not in self.img_dirs:
+            self.img_dirs.append(fallback_img_dir)
+
+        # 确保默认存储目录存在（只对可写路径执行）
+        for d in self.img_dirs:
+            try:
+                os.makedirs(d, exist_ok=True)
+            except (OSError, PermissionError):
+                # 可能是只读或外部挂载，忽略创建错误
+                pass
+        
         # 获取图片格式配置，默认为常见格式
         self.image_formats = self.config.get("image_formats", [".png", ".jpg", ".jpeg", ".gif", ".bmp"])
 
@@ -72,13 +83,21 @@ class DataManager:
     # --- 小偶像相关 ---
     
     def get_real_name(self, name_or_nick):
-        """通过昵称查找真名"""
+        """通过昵称查找真名，并对微博常见前缀做兜底匹配"""
         idols = self.data.get("idols", {})
         if name_or_nick in idols:
             return name_or_nick
         for name, info in idols.items():
             if name_or_nick in info.get("nicknames", []):
                 return name
+        # 兜底：去掉可能的团队前缀（如 "gnz48-刘欣媛" -> "刘欣媛"）
+        if "-" in name_or_nick:
+            stripped = name_or_nick.split("-")[-1].strip()
+            if stripped in idols:
+                return stripped
+            for name, info in idols.items():
+                if stripped in info.get("nicknames", []):
+                    return name
         return None
 
     def add_idol(self, name):
@@ -95,8 +114,14 @@ class DataManager:
                 "catchphrases": {}  # 应援口号：{"触发句": "响应内容"}
             }
             self.save("idols")
-            # 自动创建图片文件夹
-            os.makedirs(os.path.join(self.img_dir, name), exist_ok=True)
+            # 自动创建图片文件夹（在可写的目录中创建，优先使用备用目录）
+            for img_dir in reversed(self.img_dirs):  # 从后往前，优先在备用目录创建
+                try:
+                    folder_path = os.path.join(img_dir, name, "img", "原创微博图片文件夹")
+                    os.makedirs(folder_path, exist_ok=True)
+                    break  # 成功创建一个即可
+                except (OSError, PermissionError):
+                    continue  # 如果无法创建，尝试下一个目录
 
     def get_random_idol(self):
         """随机获取一个已注册的小偶像名字"""
@@ -106,22 +131,43 @@ class DataManager:
     # --- 图片相关 ---
 
     def get_random_image_path(self, idol_name):
-        """从 plugin_data/插件名/idol_name/ 目录下随机获取一张图片路径"""
-        folder_path = os.path.join(self.img_dir, idol_name)
+        """
+        从图片目录中随机获取一张图片路径。
+        仅使用"真名/昵称"目录，并在其中查找 <name>/img/原创微博图片文件夹/。
+        如果偶像不在系统中，也会尝试用原始名字查找图片目录。
+        """
+        idols = self.data.get("idols", {})
+        # 获取昵称列表（如果偶像在系统中）
+        nicknames = idols.get(idol_name, {}).get("nicknames", [])
+
+        # 以真名 + 昵称列表作为目录名候选
+        seen = set()
+        folder_names = []
+        for name in [idol_name] + nicknames:
+            if name and name not in seen:
+                seen.add(name)
+                folder_names.append(name)
         
-        if not os.path.exists(folder_path):
-            return None
-        
-        try:
-            # 筛选图片文件，使用配置的图片格式
-            images = [f for f in os.listdir(folder_path) 
-                     if any(f.lower().endswith(fmt.lower()) for fmt in self.image_formats)]
-            
-            if not images:
-                return None
-                
-            return os.path.join(folder_path, random.choice(images))
-        except (OSError, PermissionError) as e:
-            # 处理权限错误或目录访问错误
-            logging.error(f"访问图片目录 {folder_path} 失败: {e}")
-            return None
+        # 如果偶像不在系统中，尝试去掉前缀后的名字（如 "gnz48-刘欣媛" -> "刘欣媛"）
+        if idol_name not in idols and "-" in idol_name:
+            stripped = idol_name.split("-")[-1].strip()
+            if stripped and stripped not in seen:
+                folder_names.append(stripped)
+
+        # 遍历主/辅图片根目录，在其中查找 <name>/img/原创微博图片文件夹/
+        for root_dir in self.img_dirs:
+            for name in folder_names:
+                folder_path = os.path.join(root_dir, name, "img", "原创微博图片文件夹")
+                if not os.path.exists(folder_path):
+                    continue
+                try:
+                    images = [
+                        f for f in os.listdir(folder_path)
+                        if any(f.lower().endswith(fmt.lower()) for fmt in self.image_formats)
+                    ]
+                    if images:
+                        return os.path.join(folder_path, random.choice(images))
+                except (OSError, PermissionError) as e:
+                    logging.error(f"访问图片目录 {folder_path} 失败: {e}")
+                    continue
+        return None
