@@ -133,41 +133,163 @@ class DataManager:
     def get_random_image_path(self, idol_name):
         """
         从图片目录中随机获取一张图片路径。
-        仅使用"真名/昵称"目录，并在其中查找 <name>/img/原创微博图片文件夹/。
-        如果偶像不在系统中，也会尝试用原始名字查找图片目录。
+        优先使用爬虫目录：从配置的 image_base_dir 回退到 apps 目录，找到 weibo-crawler-master/weibo，
+        遍历该目录下的所有文件夹，匹配包含小偶像名字的目录。
+        如果找不到，回退到默认 plugin_data 目录。
         """
         idols = self.data.get("idols", {})
         # 获取昵称列表（如果偶像在系统中）
         nicknames = idols.get(idol_name, {}).get("nicknames", [])
-
-        # 以真名 + 昵称列表作为目录名候选
-        seen = set()
-        folder_names = []
-        for name in [idol_name] + nicknames:
-            if name and name not in seen:
-                seen.add(name)
-                folder_names.append(name)
         
-        # 如果偶像不在系统中，尝试去掉前缀后的名字（如 "gnz48-刘欣媛" -> "刘欣媛"）
-        if idol_name not in idols and "-" in idol_name:
+        # 构建匹配关键词列表：真名 + 昵称
+        match_keywords = [idol_name] + nicknames
+        # 如果名字包含前缀（如 "gnz48-刘欣媛"），也添加去掉前缀后的名字
+        if "-" in idol_name:
             stripped = idol_name.split("-")[-1].strip()
-            if stripped and stripped not in seen:
-                folder_names.append(stripped)
-
-        # 遍历主/辅图片根目录，在其中查找 <name>/img/原创微博图片文件夹/
+            if stripped and stripped not in match_keywords:
+                match_keywords.append(stripped)
+        
+        # 方法1：优先尝试爬虫目录（智能匹配）
+        if self.img_dirs and len(self.img_dirs) > 0:
+            crawler_root = self.img_dirs[0]  # 第一个是配置的爬虫目录
+            logging.debug(f"尝试爬虫目录，起始路径: {crawler_root}")
+            if crawler_root and os.path.exists(crawler_root):
+                # 尝试回退到 apps 目录，找到 weibo-crawler-master/weibo
+                crawler_path = self._find_crawler_weibo_dir(crawler_root)
+                if crawler_path:
+                    logging.debug(f"找到爬虫 weibo 目录: {crawler_path}")
+                    # 遍历爬虫目录下的所有文件夹，匹配包含关键词的目录
+                    matched_folder = self._match_idol_folder(crawler_path, match_keywords)
+                    if matched_folder:
+                        logging.debug(f"匹配到偶像文件夹: {matched_folder}")
+                        # 尝试多种图片子目录格式
+                        img_subdirs = [
+                            os.path.join(matched_folder, "img", "原创微博图片"),
+                            os.path.join(matched_folder, "img", "原创微博图片文件夹"),
+                        ]
+                        for img_dir in img_subdirs:
+                            logging.debug(f"尝试图片目录: {img_dir}")
+                            if os.path.exists(img_dir) and os.path.isdir(img_dir):
+                                image_path = self._get_random_image_from_dir(img_dir)
+                                if image_path:
+                                    logging.info(f"✅ 从爬虫目录找到图片: {image_path}")
+                                    return image_path
+                    else:
+                        logging.debug(f"未在爬虫目录中找到匹配的文件夹，关键词: {match_keywords}")
+                else:
+                    logging.debug(f"未找到爬虫 weibo 目录，起始路径: {crawler_root}")
+        
+        # 方法2：回退到默认目录（使用原来的逻辑）
+        # 定义多种路径格式（按优先级排序）
+        path_patterns = [
+            ("img", "原创微博图片"),  # 爬虫格式
+        ]
+        
+        # 遍历所有图片根目录（包括备用目录）
         for root_dir in self.img_dirs:
-            for name in folder_names:
-                folder_path = os.path.join(root_dir, name, "img", "原创微博图片文件夹")
-                if not os.path.exists(folder_path):
+            for keyword in match_keywords:
+                for pattern in path_patterns:
+                    if len(pattern) == 2:
+                        folder_path = os.path.join(root_dir, keyword, pattern[0], pattern[1])
+                    elif len(pattern) == 1:
+                        folder_path = os.path.join(root_dir, keyword, pattern[0]) if pattern[0] else os.path.join(root_dir, keyword)
+                    else:
+                        continue
+                    
+                    if not os.path.exists(folder_path) or not os.path.isdir(folder_path):
+                        continue
+                    
+                    image_path = self._get_random_image_from_dir(folder_path)
+                    if image_path:
+                        logging.debug(f"从默认目录找到图片: {image_path}")
+                        return image_path
+        
+        logging.warning(f"未找到 {idol_name} 的图片，匹配关键词: {match_keywords}, 根目录: {self.img_dirs}")
+        return None
+    
+    def _find_crawler_weibo_dir(self, start_path):
+        """
+        从给定路径回退到 apps 目录，找到 weibo-crawler-master/weibo 目录
+        如果 start_path 本身已经是 weibo 目录，直接返回
+        """
+        if not start_path or not os.path.exists(start_path):
+            return None
+        
+        current = os.path.abspath(start_path)
+        
+        # 先检查当前路径本身是否是 weibo 目录（路径名以 weibo 结尾）
+        if os.path.basename(current) == "weibo" and os.path.isdir(current):
+            logging.debug(f"当前路径就是 weibo 目录: {current}")
+            return current
+        
+        # 检查当前路径是否是 weibo-crawler-master/weibo
+        if os.path.basename(os.path.dirname(current)) == "weibo-crawler-master" and os.path.basename(current) == "weibo":
+            logging.debug(f"当前路径就是 weibo-crawler-master/weibo: {current}")
+            return current
+        
+        max_levels = 10  # 最多回退10级，防止无限循环
+        
+        for _ in range(max_levels):
+            # 检查当前目录下是否有 weibo-crawler-master/weibo
+            weibo_path = os.path.join(current, "weibo-crawler-master", "weibo")
+            if os.path.exists(weibo_path) and os.path.isdir(weibo_path):
+                logging.debug(f"找到爬虫目录: {weibo_path}")
+                return weibo_path
+            
+            # 检查当前目录是否是 apps 目录
+            if os.path.basename(current) == "apps":
+                weibo_path = os.path.join(current, "weibo-crawler-master", "weibo")
+                if os.path.exists(weibo_path) and os.path.isdir(weibo_path):
+                    logging.debug(f"找到爬虫目录: {weibo_path}")
+                    return weibo_path
+            
+            # 回退一级
+            parent = os.path.dirname(current)
+            if parent == current:  # 已经到根目录了
+                break
+            current = parent
+        
+        return None
+    
+    def _match_idol_folder(self, weibo_dir, keywords):
+        """
+        在爬虫目录下查找包含关键词的文件夹
+        """
+        if not os.path.exists(weibo_dir) or not os.path.isdir(weibo_dir):
+            return None
+        
+        try:
+            for folder_name in os.listdir(weibo_dir):
+                folder_path = os.path.join(weibo_dir, folder_name)
+                if not os.path.isdir(folder_path):
                     continue
-                try:
-                    images = [
-                        f for f in os.listdir(folder_path)
-                        if any(f.lower().endswith(fmt.lower()) for fmt in self.image_formats)
-                    ]
-                    if images:
-                        return os.path.join(folder_path, random.choice(images))
-                except (OSError, PermissionError) as e:
-                    logging.error(f"访问图片目录 {folder_path} 失败: {e}")
-                    continue
+                
+                # 检查文件夹名是否包含任何一个关键词
+                for keyword in keywords:
+                    if keyword and keyword in folder_name:
+                        logging.debug(f"匹配到文件夹: {folder_path} (关键词: {keyword})")
+                        return folder_path
+        except (OSError, PermissionError) as e:
+            logging.error(f"遍历爬虫目录失败: {e}")
+        
+        return None
+    
+    def _get_random_image_from_dir(self, img_dir):
+        """
+        从指定目录中随机获取一张图片
+        """
+        if not os.path.exists(img_dir) or not os.path.isdir(img_dir):
+            return None
+        
+        try:
+            images = [
+                f for f in os.listdir(img_dir)
+                if os.path.isfile(os.path.join(img_dir, f)) and
+                any(f.lower().endswith(fmt.lower()) for fmt in self.image_formats)
+            ]
+            if images:
+                return os.path.join(img_dir, random.choice(images))
+        except (OSError, PermissionError) as e:
+            logging.error(f"读取图片目录失败 {img_dir}: {e}")
+        
         return None
